@@ -1,0 +1,10 @@
+---
+title: "Clear Skies"
+subtitle: "Filtering of Dutch weather radar data"
+author: "Bart Hoekstra"
+site: bookdown::bookdown_site
+documentclass: book
+link-citations: yes
+---
+
+# Introduction {-}

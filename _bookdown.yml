@@ -1,0 +1,9 @@
+book_filename: clearskies
+repo: https://github.com/barthoekstra/clearskies
+view: https://github.com/barthoekstra/clearskies/blob/main/%s
+edit: https://github.com/barthoekstra/clearskies/edit/main/%s
+output_dir: docs
+delete_merged_file: true
+new_session: true
+rmd_files:
+- "index.Rmd"
