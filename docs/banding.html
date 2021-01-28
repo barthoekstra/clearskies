@@ -1,0 +1,173 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+<title>1 Banding | Clear Skies</title>
+<meta name="author" content="Bart Hoekstra">
+<!-- JS --><script src="https://cdnjs.cloudflare.com/ajax/libs/clipboard.js/2.0.6/clipboard.min.js" integrity="sha256-inc5kl9MA1hkeYUt+EC3BhlIgyp/2jDIyBLS6k3UxPI=" crossorigin="anonymous"></script><script src="https://cdn.jsdelivr.net/npm/fuse.js@6.4.2"></script><script src="https://kit.fontawesome.com/6ecbd6c532.js" crossorigin="anonymous"></script><script src="libs/jquery-3.5.1/jquery-3.5.1.min.js"></script><meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+<link href="libs/bootstrap-4.5.3/bootstrap.min.css" rel="stylesheet">
+<script src="libs/bootstrap-4.5.3/bootstrap.bundle.min.js"></script><script src="libs/bs3compat-0.2.4.9000/tabs.js"></script><script src="libs/bs3compat-0.2.4.9000/bs3compat.js"></script><link href="libs/bs4_book-1.0.0/bs4_book.css" rel="stylesheet">
+<script src="libs/bs4_book-1.0.0/bs4_book.js"></script><script src="libs/accessible-code-block-0.0.1/empty-anchor.js"></script><script src="https://cdn.jsdelivr.net/autocomplete.js/0/autocomplete.jquery.min.js"></script><script src="https://cdn.jsdelivr.net/npm/mark.js@8.11.1/dist/mark.min.js"></script><!-- CSS -->
+</head>
+<body data-spy="scroll" data-target="#toc">
+
+<div class="container-fluid">
+<div class="row">
+  <header class="col-sm-12 col-lg-3 sidebar sidebar-book"><a class="sr-only sr-only-focusable" href="#content">Skip to main content</a>
+
+    <div class="d-flex align-items-start justify-content-between">
+      <h1>
+        <a href="index.html" title="Filtering of Dutch weather radar data">Clear Skies</a>:
+        <small class="text-muted">Filtering of Dutch weather radar data</small>
+      </h1>
+      <button class="btn btn-outline-primary d-lg-none ml-2 mt-1" type="button" data-toggle="collapse" data-target="#main-nav" aria-expanded="true" aria-controls="main-nav"><i class="fas fa-bars"></i><span class="sr-only">Show table of contents</span></button>
+    </div>
+
+    <div id="main-nav" class="collapse-lg">
+      <form role="search">
+        <input id="search" class="form-control" type="search" placeholder="Search" aria-label="Search">
+</form>
+
+      <nav aria-label="Table of contents"><h2>Table of contents</h2>
+        <ul class="book-toc list-unstyled">
+<li><a class="" href="index.html">Home</a></li>
+<li><a class="active" href="banding.html"><span class="header-section-number">1</span> Banding</a></li>
+</ul>
+
+        <div class="book-extra">
+          <p><a id="book-repo" href="https://github.com/barthoekstra/clearskies">View book source <i class="fab fa-github"></i></a></p>
+        </div>
+      </nav>
+</div>
+  </header><main class="col-sm-12 col-md-9 col-lg-7" id="content"><div id="banding" class="section level1">
+<h1>
+<span class="header-section-number">1</span> Banding<a class="anchor" aria-label="anchor" href="#banding"><i class="fas fa-link"></i></a>
+</h1>
+<p>A for now unexplained banding phenomenon shows up in some cases in the lower elevation scans of the Dutch radars. This appears to be the result of something going on in the dual-PRF scans, especially in the vicinity of clutter sources at sea (wind parks, ships).</p>
+<div id="the-problem" class="section level2">
+<h2>
+<span class="header-section-number">1.1</span> The problem<a class="anchor" aria-label="anchor" href="#the-problem"><i class="fas fa-link"></i></a>
+</h2>
+<p>Let’s load an example scan and calculate the RBC PPI which shows the issue clearly.</p>
+<div class="sourceCode" id="cb1"><pre class="downlit sourceCode r">
+<code class="sourceCode R"><span class="va">pvolfile</span> <span class="op">&lt;-</span> <span class="st">"data/20201002/NLDHL_pvol_20201002T0550_6234.h5"</span>
+<span class="va">pvol</span> <span class="op">&lt;-</span> <span class="fu">read_pvolfile</span><span class="op">(</span>file <span class="op">=</span> <span class="va">pvolfile</span>, param <span class="op">=</span> <span class="st">"all"</span><span class="op">)</span>
+<span class="va">vp</span> <span class="op">&lt;-</span> <span class="fu">calculate_vp</span><span class="op">(</span><span class="va">pvolfile</span>, verbose <span class="op">=</span> <span class="cn">FALSE</span><span class="op">)</span>
+<span class="va">ppi_banding</span> <span class="op">&lt;-</span> <span class="fu">integrate_to_ppi</span><span class="op">(</span><span class="va">pvol</span>, <span class="va">vp</span>, xlim <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/c.html">c</a></span><span class="op">(</span><span class="op">-</span><span class="fl">180000</span>, <span class="fl">180000</span><span class="op">)</span>, ylim <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/c.html">c</a></span><span class="op">(</span><span class="op">-</span><span class="fl">180000</span>, <span class="fl">180000</span><span class="op">)</span>, res <span class="op">=</span> <span class="fl">500</span>, param <span class="op">=</span> <span class="st">"DBZH"</span><span class="op">)</span>
+<span class="va">plot_banding</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/graphics/plot.html">plot</a></span><span class="op">(</span><span class="va">ppi_banding</span><span class="op">)</span> <span class="op">+</span> <span class="fu">ggtitle</span><span class="op">(</span><span class="st">"Original RBC PPI"</span><span class="op">)</span>
+<span class="va">plot_banding</span></code></pre></div>
+<div class="inline-figure"><img src="banding_files/figure-html/create_banding_ppi-1.png" width="100%"></div>
+<p>For this <code>pvol</code> we create a <span class="math inline">\((r, a)\)</span> range-azimuth plot for the 7 lowest scans, as the issue is not visible at higher elevations in this scan. Though it may still occur there, due to the elevations of the highest scans it will not have a clear effect on the PPIs anyways.</p>
+<div class="sourceCode" id="cb2"><pre class="downlit sourceCode r">
+<code class="sourceCode R"><span class="va">elevs</span> <span class="op">&lt;-</span> <span class="fu">get_elevation_angles</span><span class="op">(</span><span class="va">pvol</span><span class="op">)</span>
+<span class="va">nr_elevs</span> <span class="op">&lt;-</span> <span class="fl">1</span><span class="op">:</span><span class="fl">7</span>
+<span class="fu"><a href="https://rdrr.io/r/base/lapply.html">lapply</a></span><span class="op">(</span><span class="va">nr_elevs</span>, <span class="kw">function</span><span class="op">(</span><span class="va">x</span><span class="op">)</span> <span class="op">{</span>
+  <span class="fu"><a href="https://rdrr.io/r/graphics/plot.html">plot</a></span><span class="op">(</span><span class="va">pvol</span><span class="op">$</span><span class="va">scans</span><span class="op">[[</span><span class="va">x</span><span class="op">]</span><span class="op">]</span>, xlim <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/c.html">c</a></span><span class="op">(</span><span class="fl">0</span>, <span class="fl">320000</span><span class="op">)</span><span class="op">)</span> <span class="op">+</span> 
+    <span class="fu">ggtitle</span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/paste.html">paste0</a></span><span class="op">(</span><span class="st">"Elevation: "</span>, <span class="fu"><a href="https://rdrr.io/r/base/Round.html">round</a></span><span class="op">(</span><span class="va">elevs</span><span class="op">[</span><span class="va">x</span><span class="op">]</span>, <span class="fl">2</span><span class="op">)</span>,
+                   <span class="st">"; High prf: "</span>, <span class="va">pvol</span><span class="op">$</span><span class="va">scans</span><span class="op">[[</span><span class="va">x</span><span class="op">]</span><span class="op">]</span><span class="op">$</span><span class="va">attributes</span><span class="op">$</span><span class="va">how</span><span class="op">$</span><span class="va">highprf</span>,
+                   <span class="st">"; Low prf: "</span>, <span class="va">pvol</span><span class="op">$</span><span class="va">scans</span><span class="op">[[</span><span class="va">x</span><span class="op">]</span><span class="op">]</span><span class="op">$</span><span class="va">attributes</span><span class="op">$</span><span class="va">how</span><span class="op">$</span><span class="va">lowprf</span><span class="op">)</span><span class="op">)</span>
+<span class="op">}</span><span class="op">)</span></code></pre></div>
+<p><img src="banding_files/figure-html/plot_elevation_scans_ra-1.png" width="100%"><img src="banding_files/figure-html/plot_elevation_scans_ra-2.png" width="100%"><img src="banding_files/figure-html/plot_elevation_scans_ra-3.png" width="100%"><img src="banding_files/figure-html/plot_elevation_scans_ra-4.png" width="100%"><img src="banding_files/figure-html/plot_elevation_scans_ra-5.png" width="100%"><img src="banding_files/figure-html/plot_elevation_scans_ra-6.png" width="100%"><img src="banding_files/figure-html/plot_elevation_scans_ra-7.png" width="100%"></p>
+<p>This suggests it’s related to the dual-PRF scans indeed, which are the most common scans in the Dutch radar, so we cannot just throw them out and they serve an important purpose: the unambiguous velocities for these dual-PRF scans is highest, so the <code>VRAD</code> values are least likely to fold/alias. The following scans use dual-PRFs.</p>
+<div class="sourceCode" id="cb3"><pre class="downlit sourceCode r">
+<code class="sourceCode R"><span class="fu">get_elevation_angles</span><span class="op">(</span><span class="va">pvol</span><span class="op">)</span><span class="op">[</span><span class="fu"><a href="https://rdrr.io/r/base/which.html">which</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/lapply.html">sapply</a></span><span class="op">(</span><span class="va">pvol</span><span class="op">$</span><span class="va">scans</span>, <span class="kw">function</span><span class="op">(</span><span class="va">x</span><span class="op">)</span> <span class="va">x</span><span class="op">$</span><span class="va">attributes</span><span class="op">$</span><span class="va">how</span><span class="op">$</span><span class="va">highprf</span> <span class="op">!=</span> <span class="fl">0</span> <span class="op">&amp;</span> <span class="va">x</span><span class="op">$</span><span class="va">attributes</span><span class="op">$</span><span class="va">how</span><span class="op">$</span><span class="va">lowprf</span> <span class="op">!=</span> <span class="fl">0</span><span class="op">)</span><span class="op">)</span><span class="op">]</span></code></pre></div>
+<pre><code>##  [1]  0.3  0.8  1.2  2.0  2.8  4.5  6.0  8.0 10.0 12.0 15.0 20.0 25.0</code></pre>
+<p>In other words, there are only 3 elevations at which this is not in use, which are two <span class="math inline">\(0.3^\circ\)</span> scans and the bird-bath scan at <span class="math inline">\(90^\circ\)</span>, so it’s not an option, and would be a waste, to throw the dual-PRF scans out.</p>
+</div>
+<div id="solution" class="section level2">
+<h2>
+<span class="header-section-number">1.2</span> Solution<a class="anchor" aria-label="anchor" href="#solution"><i class="fas fa-link"></i></a>
+</h2>
+<p>We can plot the other parameters of a single elevation scan to see if there are possibilities to filter the banding issue out.</p>
+<div class="sourceCode" id="cb5"><pre class="downlit sourceCode r">
+<code class="sourceCode R"><span class="va">pvol</span> <span class="op">&lt;-</span> <span class="fu">calculate_param</span><span class="op">(</span><span class="va">pvol</span>, 
+                        ZDRL <span class="op">=</span> <span class="fl">10</span> <span class="op">**</span> <span class="op">(</span><span class="op">(</span><span class="va">DBZH</span> <span class="op">-</span> <span class="va">DBZV</span><span class="op">)</span> <span class="op">/</span><span class="fl">10</span><span class="op">)</span>,
+                        DPR <span class="op">=</span> <span class="fl">10</span> <span class="op">*</span> <span class="fu"><a href="https://rdrr.io/r/base/Log.html">log10</a></span><span class="op">(</span><span class="op">(</span><span class="va">ZDRL</span> <span class="op">+</span> <span class="fl">1</span> <span class="op">-</span> <span class="fl">2</span> <span class="op">*</span> <span class="va">ZDRL</span><span class="op">^</span><span class="fl">0.5</span> <span class="op">*</span> <span class="va">RHOHV</span><span class="op">)</span> <span class="op">/</span> <span class="op">(</span><span class="va">ZDRL</span> <span class="op">+</span> <span class="fl">1</span> <span class="op">+</span> <span class="fl">2</span> <span class="op">*</span> <span class="va">ZDRL</span><span class="op">^</span> <span class="fl">0.5</span> <span class="op">*</span> <span class="va">RHOHV</span><span class="op">)</span><span class="op">)</span><span class="op">)</span>
+<span class="fu"><a href="https://rdrr.io/r/base/lapply.html">lapply</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/c.html">c</a></span><span class="op">(</span><span class="st">"DBZH"</span>, <span class="st">"VRADH"</span>, <span class="st">"RHOHV"</span>, <span class="st">"DPR"</span><span class="op">)</span>, <span class="kw">function</span><span class="op">(</span><span class="va">x</span><span class="op">)</span> <span class="fu"><a href="https://rdrr.io/r/graphics/plot.html">plot</a></span><span class="op">(</span><span class="va">pvol</span><span class="op">$</span><span class="va">scans</span><span class="op">[[</span><span class="fl">1</span><span class="op">]</span><span class="op">]</span>, xlim <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/c.html">c</a></span><span class="op">(</span><span class="fl">0</span>, <span class="fl">200000</span><span class="op">)</span>, param <span class="op">=</span> <span class="va">x</span><span class="op">)</span><span class="op">)</span></code></pre></div>
+<p><img src="banding_files/figure-html/plot_scan_parameters_elevation_1-1.png" width="100%"><img src="banding_files/figure-html/plot_scan_parameters_elevation_1-2.png" width="100%"><img src="banding_files/figure-html/plot_scan_parameters_elevation_1-3.png" width="100%"><img src="banding_files/figure-html/plot_scan_parameters_elevation_1-4.png" width="100%"></p>
+<p>It seems that both <code>RHOHV</code> and <code>DPR</code> will sufficient to filter out the majority of these areas where this banding pattern occurs. In fact, a standard rain filter and some de-speckling (using <code>RHOHV &gt; 0.95</code> or <code>DPR &lt; -12</code>) would probably have unintentionally done the same. We can apply such a filter and plot the results again.</p>
+<div class="sourceCode" id="cb6"><pre class="downlit sourceCode r">
+<code class="sourceCode R"><span class="va">pvol</span> <span class="op">&lt;-</span> <span class="fu">calculate_param</span><span class="op">(</span><span class="va">pvol</span>, RAIN <span class="op">=</span> <span class="va">RHOHV</span> <span class="op">&gt;=</span> <span class="fl">0.95</span>, DBZHF <span class="op">=</span> <span class="va">DBZH</span><span class="op">)</span>
+
+<span class="va">pvol</span><span class="op">$</span><span class="va">scans</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/lapply.html">lapply</a></span><span class="op">(</span><span class="va">pvol</span><span class="op">$</span><span class="va">scans</span>, <span class="kw">function</span><span class="op">(</span><span class="va">x</span><span class="op">)</span> <span class="op">{</span>
+  <span class="va">dbzh</span> <span class="op">&lt;-</span> <span class="va">x</span><span class="op">$</span><span class="va">params</span><span class="op">[[</span><span class="st">"DBZH"</span><span class="op">]</span><span class="op">]</span>
+  <span class="va">rhohv</span> <span class="op">&lt;-</span> <span class="va">x</span><span class="op">$</span><span class="va">params</span><span class="op">[[</span><span class="st">"RHOHV"</span><span class="op">]</span><span class="op">]</span>
+  <span class="va">dpr</span> <span class="op">&lt;-</span> <span class="va">x</span><span class="op">$</span><span class="va">params</span><span class="op">[[</span><span class="st">"DPR"</span><span class="op">]</span><span class="op">]</span>
+  <span class="va">dbzh</span><span class="op">[</span><span class="va">rhohv</span> <span class="op">&gt;=</span> <span class="fl">0.95</span><span class="op">]</span> <span class="op">&lt;-</span> <span class="cn">NA</span>
+  <span class="va">dbzh</span><span class="op">[</span><span class="va">dpr</span> <span class="op">&lt;</span> <span class="op">-</span><span class="fl">12</span><span class="op">]</span> <span class="op">&lt;-</span> <span class="cn">NA</span>
+  <span class="va">x</span><span class="op">$</span><span class="va">params</span><span class="op">[[</span><span class="st">"DBZHF"</span><span class="op">]</span><span class="op">]</span> <span class="op">&lt;-</span> <span class="va">dbzh</span>
+  <span class="kw"><a href="https://rdrr.io/r/base/function.html">return</a></span><span class="op">(</span><span class="va">x</span><span class="op">)</span>
+<span class="op">}</span><span class="op">)</span>
+
+<span class="fu"><a href="https://rdrr.io/r/base/lapply.html">lapply</a></span><span class="op">(</span><span class="va">nr_elevs</span>, <span class="kw">function</span><span class="op">(</span><span class="va">x</span><span class="op">)</span> <span class="op">{</span>
+  <span class="fu"><a href="https://rdrr.io/r/graphics/plot.html">plot</a></span><span class="op">(</span><span class="va">pvol</span><span class="op">$</span><span class="va">scans</span><span class="op">[[</span><span class="va">x</span><span class="op">]</span><span class="op">]</span>, xlim <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/c.html">c</a></span><span class="op">(</span><span class="fl">0</span>, <span class="fl">320000</span><span class="op">)</span>, param <span class="op">=</span> <span class="st">"DBZHF"</span><span class="op">)</span> <span class="op">+</span> 
+    <span class="fu">ggtitle</span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/paste.html">paste0</a></span><span class="op">(</span><span class="st">"Elevation: "</span>, <span class="fu"><a href="https://rdrr.io/r/base/Round.html">round</a></span><span class="op">(</span><span class="va">elevs</span><span class="op">[</span><span class="va">x</span><span class="op">]</span>, <span class="fl">2</span><span class="op">)</span>,
+                   <span class="st">"; High prf: "</span>, <span class="va">pvol</span><span class="op">$</span><span class="va">scans</span><span class="op">[[</span><span class="va">x</span><span class="op">]</span><span class="op">]</span><span class="op">$</span><span class="va">attributes</span><span class="op">$</span><span class="va">how</span><span class="op">$</span><span class="va">highprf</span>,
+                   <span class="st">"; Low prf: "</span>, <span class="va">pvol</span><span class="op">$</span><span class="va">scans</span><span class="op">[[</span><span class="va">x</span><span class="op">]</span><span class="op">]</span><span class="op">$</span><span class="va">attributes</span><span class="op">$</span><span class="va">how</span><span class="op">$</span><span class="va">lowprf</span><span class="op">)</span><span class="op">)</span>
+<span class="op">}</span><span class="op">)</span></code></pre></div>
+<p><img src="banding_files/figure-html/plot_elevation_scans_ra_after_filtering-1.png" width="100%"><img src="banding_files/figure-html/plot_elevation_scans_ra_after_filtering-2.png" width="100%"><img src="banding_files/figure-html/plot_elevation_scans_ra_after_filtering-3.png" width="100%"><img src="banding_files/figure-html/plot_elevation_scans_ra_after_filtering-4.png" width="100%"><img src="banding_files/figure-html/plot_elevation_scans_ra_after_filtering-5.png" width="100%"><img src="banding_files/figure-html/plot_elevation_scans_ra_after_filtering-6.png" width="100%"><img src="banding_files/figure-html/plot_elevation_scans_ra_after_filtering-7.png" width="100%"></p>
+<p>Now we recalculate the RBC (right) and compare the results with the initial version with banding (left).</p>
+<div class="sourceCode" id="cb7"><pre class="downlit sourceCode r">
+<code class="sourceCode R"><span class="va">pvol_filtered</span> <span class="op">&lt;-</span> <span class="fu">calculate_param</span><span class="op">(</span><span class="va">pvol</span>, DBZH <span class="op">=</span> <span class="va">DBZHF</span><span class="op">)</span>
+<span class="va">ppi_nobanding</span> <span class="op">&lt;-</span> <span class="fu">integrate_to_ppi</span><span class="op">(</span><span class="va">pvol_filtered</span>, <span class="va">vp</span>, xlim <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/c.html">c</a></span><span class="op">(</span><span class="op">-</span><span class="fl">180000</span>, <span class="fl">180000</span><span class="op">)</span>, ylim <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/c.html">c</a></span><span class="op">(</span><span class="op">-</span><span class="fl">180000</span>, <span class="fl">180000</span><span class="op">)</span>, res <span class="op">=</span> <span class="fl">500</span><span class="op">)</span>
+<span class="va">plot_nobanding</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/graphics/plot.html">plot</a></span><span class="op">(</span><span class="va">ppi_nobanding</span><span class="op">)</span> <span class="op">+</span> <span class="fu">ggtitle</span><span class="op">(</span><span class="st">"Filtered RBC PPI"</span><span class="op">)</span>
+<span class="va">plot_banding</span> <span class="op">+</span> <span class="va">plot_nobanding</span> <span class="op">+</span> <span class="fu">plot_layout</span><span class="op">(</span>guides <span class="op">=</span> <span class="st">"collect"</span><span class="op">)</span></code></pre></div>
+<div class="inline-figure"><img src="banding_files/figure-html/create_nobanding_ppi-1.png" width="100%"></div>
+<p>That’s much better already.</p>
+<p>Finally, an example of a moment the Herwijnen radar shows substantial banding (left), and the same moment filtered quite a bit (right). We load the following <code>pvol</code>: <code>NLHRW_pvol_20201002T1350_6356.h5</code>.</p>
+<div class="inline-figure"><img src="banding_files/figure-html/create_nobanding_ppi_hrw-1.png" width="100%"></div>
+<p>Obviously rain-filtering needs some more work, in particular smoothing or despeckling, but approaches that improve precipitation filtering will presumably automatically improve filtering of this banding issue as well.</p>
+
+</div>
+</div>
+  <div class="chapter-nav">
+<div class="prev"><a href="index.html">Home</a></div>
+<div class="empty"></div>
+</div></main><div class="col-md-3 col-lg-2 d-none d-md-block sidebar sidebar-chapter">
+    <nav id="toc" data-toggle="toc" aria-label="On this page"><h2>On this page</h2>
+      <ul class="nav navbar-nav">
+<li><a class="nav-link" href="#banding"><span class="header-section-number">1</span> Banding</a></li>
+<li><a class="nav-link" href="#the-problem"><span class="header-section-number">1.1</span> The problem</a></li>
+<li><a class="nav-link" href="#solution"><span class="header-section-number">1.2</span> Solution</a></li>
+</ul>
+
+      <div class="book-extra">
+        <ul class="list-unstyled">
+<li><a id="book-source" href="https://github.com/barthoekstra/clearskies/blob/master/banding.Rmd">View source <i class="fab fa-github"></i></a></li>
+          <li><a id="book-edit" href="https://github.com/barthoekstra/clearskies/edit/master/banding.Rmd">Edit this page <i class="fab fa-github"></i></a></li>
+        </ul>
+</div>
+    </nav>
+</div>
+
+</div>
+</div> <!-- .container -->
+
+<footer class="bg-primary text-light mt-5"><div class="container"><div class="row">
+
+  <div class="col-12 col-md-6 mt-3">
+    <p>"<strong>Clear Skies</strong>: Filtering of Dutch weather radar data" was written by Bart Hoekstra. </p>
+  </div>
+
+  <div class="col-12 col-md-6 mt-3">
+    <p>This book was built by the <a class="text-light" href="https://bookdown.org">bookdown</a> R package.</p>
+  </div>
+
+</div></div>
+</footer><!-- dynamically load mathjax for compatibility with self-contained --><script>
+  (function () {
+    var script = document.createElement("script");
+    script.type = "text/javascript";
+    var src = "true";
+    if (src === "" || src === "true") src = "https://mathjax.rstudio.com/latest/MathJax.js?config=TeX-MML-AM_CHTML";
+    if (location.protocol !== "file:")
+      if (/^https?:/.test(src))
+        src = src.replace(/^https?:/, '');
+    script.src = src;
+    document.getElementsByTagName("head")[0].appendChild(script);
+  })();
+</script>
+</body>
+</html>
