@@ -43,3 +43,4 @@ data
 .DS_Store
 docs/*.md
 clearskies.rds
+_bookdown_files
