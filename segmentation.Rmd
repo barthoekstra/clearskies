@@ -33,7 +33,7 @@ There's clearly a lot of rain in this scan. Now, we can filter this using the de
 
 First, let's make a plot of what pixels we lose if we filter for pixels where we can calculate the `DPR` for, which means both `DBZV` and `RHOHV` must have been available.
 
-```{r warning=FALSE}
+```{r plot_dual_pol_pixels, warning=FALSE, out.width='100%'}
 pvol_original <- pvol  # Let's keep the original pvol for comparison
 
 pvol <- calculate_param(pvol, 
@@ -53,9 +53,10 @@ ppiplot_dualpol <- plot(ppi_dualpol) + ggtitle("Dual-pol available RBC PPI")
 
 ppiplot_rainy + ppiplot_dualpol + plot_layout(guides = "collect")
 ```
+
 We can also plot the difference, for which we make a difference of 0 transparent to better see where the PPI pixels are changed most dramatically, and we plot the differences in a histogram.
 
-```{r warning=FALSE, message=FALSE}
+```{r quantify_dualpol_pixel_difference, warning=FALSE, message=FALSE, out.width='100%'}
 ppi_difference <- ppi_dualpol
 ppi_difference$data$VIR <- ppi_rainy$data$VIR - ppi_dualpol$data$VIR
 ppi_difference$data$VIR[ppi_difference$data$VIR == 0] <- NA
@@ -83,7 +84,7 @@ The PPI and histogram suggest most VIR differences occur in regions with already
 
 We start by illustrating the approach to a single scan. We use the `DPR` as the main masking methodology, though it's possible to extend this technique to include `RHOHV`, as a combined approach may perform better. We plot a $(r,a)$ plot where white pixels are classified as rain (`dpr < -12`), and black pixels are not.
 
-```{r}
+```{r plot_mask, out.width='100%'}
 scan.dpr <- as.cimg(pvol$scans[[1]]$params[["DPR"]])
 
 (scan.dpr <= -12 & !is.na(scan.dpr)) %>%
@@ -92,7 +93,7 @@ scan.dpr <- as.cimg(pvol$scans[[1]]$params[["DPR"]])
 
 This shows a lot of pixels, especially close to the radar (lower x-values), get flagged as rain because of the `DPR` value. This is why Kilambi et al. recommend despeckling. Let's use a median-filter to apply this despeckling.
 
-```{r}
+```{r medianblur, out.width='100%'}
 (scan.dpr <= -12 & !is.na(scan.dpr)) %>%
   medianblur(4) %>%
   threshold(0) ->
@@ -103,7 +104,7 @@ despeckled %>% plot()
 
 That already looks better, but now we have 'blurred' out some of the regions to larger pixels. If we assume that true rain occurs mostly in larger areas, we can compute the contiguous areas which are flagged as precipitation, calculate the surface (number of pixels within) and filter based on a minimum number of pixels. In this case, we classify rain only as rain if it covers at least 50 pixels/rangegates.
 
-```{r}
+```{r despeckle, out.width='100%'}
 despeckled %>%
   split_connected() %>%
   purrr::keep(~ sum(.) > 50) %>%
@@ -114,7 +115,7 @@ areafilter %>% plot()
 
 Now, there's a chance we miss some pixels left and right, so if we conservatively filter out rain, we could buffer these areas a bit. So, we'll calculate the euclidean distance from non-rain to rain pixels and if that distance is < 5 units, we'll flag these pixels as rain as well.
 
-```{r}
+```{r buffer, out.width='100%'}
 areafilter %>%
   distance_transform(1, metric = 2) %>%
   threshold(5) -> buffered
@@ -136,11 +137,12 @@ pvol_thresh$scans[[1]]$params$DBZH[pvol_thresh$scans[[1]]$params$DPR < -12 | pvo
   (plot(pvol_thresh$scans[[1]], xlim = c(0, 180000)) + ggtitle("Simple threshold filter")) /
   (plot(pvol_buffer$scans[[1]], xlim = c(0, 180000)) + ggtitle("Buffered threshold filter"))
 ```
+
 Except for the continuing presence of some interference pattern, and possibly filtering out some areas with ground clutter or wind parks, we see a much cleaner rain filtering than before in the buffered threshold filter.
 
 Now let's apply it to the full `pvol`.
 
-```{r}
+```{r apply_rainfilter_to_full_scan}
 rainfilter <- function(scan) {
   if (scan$geo$elangle < 90) {
     dpr <- as.cimg(scan$params[["DPR"]])
@@ -148,12 +150,16 @@ rainfilter <- function(scan) {
       medianblur(4) %>%  # Works adequate for de-speckling
       threshold(0) %>%  # Set all pixels that have been affected by median blurring to 1, rest to 0
       split_connected() %>%  # Split image in contiguous areas classified as rain
-      purrr::keep(~ sum(.) > 50) %>%  # Only keep contiguous rain areas if area is > 100 pixels
-      parany() %>%  # Merge to 1 image again
-      distance_transform(1, 2) %>%  # Calculate Euclidean distance (2nd argument) to pixels classified as 1
-      threshold(5) -> dpr_filter
-    dpr_filter <- -dpr_filter
-    scan$params$DBZH[!as.matrix(dpr_filter)] <- NA 
+      purrr::keep(~ sum(.) > 50) %>%  # Only keep contiguous rain areas if area is > 50 pixels
+      parany() -> contiguous  # Merge to 1 image again
+    if (!is.null(contiguous)) {  # Only buffer if any rain areas of > 50 pixels are retained
+      contiguous %>%
+        distance_transform(1, 2) %>%  # Calculate Euclidean distance (2nd argument) to pixels classified as 1
+        threshold(5) -> dpr_filter
+      
+      dpr_filter <- -dpr_filter
+      scan$params$DBZH[!as.matrix(dpr_filter)] <- NA 
+    }
   }
   return(scan)
 }
@@ -169,7 +175,7 @@ pvol$scans <- lapply(pvol$scans, function(x) {
 
 And once again, calculate RBC and plot the resulting PPI.
 
-```{r warning=FALSE}
+```{r plot_final_cleaning, warning=FALSE}
 ppi_buffered <- integrate_to_ppi(pvol, vp, xlim = c(-180000, 180000), ylim = c(-180000, 180000), res = 500, param = "DBZH")
 ppiplot_buffered <- plot(ppi_buffered) + ggtitle("Buffered rain filtering")
 
@@ -181,3 +187,4 @@ At first sight the RBC PPI may look quite messy after filtering, but overall thi
 1. Most of the edges of rain clouds are removed quite well, with the exception of those at > 80km from the radar, but this is probably mostly due to dual-pol measurements not working well anymore at these distances anyways.
 1. We can still apply post-processing to the RBC PPIs, for example by filtering out pixels which have too high values of `VIR` for them to be birds. Or to simply despeckle, or calculate a median value across the whole image.
 1. We have now applied a single buffering procedure to all the scans at all elevations, but this could possibly be tweaked further for each elevation. At higher elevations, we can probably filter quite agressively, and especially if we also include altitude above the ground in our filtering approach.
+1. Many of the speckles that are visible are not necessarily rain, but were already present in the original RBC PPI, so this approach definitely did not worsen this issue much.
