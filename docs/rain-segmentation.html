@@ -1,0 +1,272 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+<title>2 Rain segmentation | Clear Skies</title>
+<meta name="author" content="Bart Hoekstra">
+<!-- JS --><script src="https://cdnjs.cloudflare.com/ajax/libs/clipboard.js/2.0.6/clipboard.min.js" integrity="sha256-inc5kl9MA1hkeYUt+EC3BhlIgyp/2jDIyBLS6k3UxPI=" crossorigin="anonymous"></script><script src="https://cdn.jsdelivr.net/npm/fuse.js@6.4.2"></script><script src="https://kit.fontawesome.com/6ecbd6c532.js" crossorigin="anonymous"></script><script src="libs/jquery-3.5.1/jquery-3.5.1.min.js"></script><meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+<link href="libs/bootstrap-4.5.3/bootstrap.min.css" rel="stylesheet">
+<script src="libs/bootstrap-4.5.3/bootstrap.bundle.min.js"></script><script src="libs/bs3compat-0.2.4.9000/tabs.js"></script><script src="libs/bs3compat-0.2.4.9000/bs3compat.js"></script><link href="libs/bs4_book-1.0.0/bs4_book.css" rel="stylesheet">
+<script src="libs/bs4_book-1.0.0/bs4_book.js"></script><script src="libs/accessible-code-block-0.0.1/empty-anchor.js"></script><script src="https://cdn.jsdelivr.net/autocomplete.js/0/autocomplete.jquery.min.js"></script><script src="https://cdn.jsdelivr.net/npm/mark.js@8.11.1/dist/mark.min.js"></script><!-- CSS -->
+</head>
+<body data-spy="scroll" data-target="#toc">
+
+<div class="container-fluid">
+<div class="row">
+  <header class="col-sm-12 col-lg-3 sidebar sidebar-book"><a class="sr-only sr-only-focusable" href="#content">Skip to main content</a>
+
+    <div class="d-flex align-items-start justify-content-between">
+      <h1>
+        <a href="index.html" title="Filtering of Dutch weather radar data">Clear Skies</a>:
+        <small class="text-muted">Filtering of Dutch weather radar data</small>
+      </h1>
+      <button class="btn btn-outline-primary d-lg-none ml-2 mt-1" type="button" data-toggle="collapse" data-target="#main-nav" aria-expanded="true" aria-controls="main-nav"><i class="fas fa-bars"></i><span class="sr-only">Show table of contents</span></button>
+    </div>
+
+    <div id="main-nav" class="collapse-lg">
+      <form role="search">
+        <input id="search" class="form-control" type="search" placeholder="Search" aria-label="Search">
+</form>
+
+      <nav aria-label="Table of contents"><h2>Table of contents</h2>
+        <ul class="book-toc list-unstyled">
+<li><a class="" href="index.html">Home</a></li>
+<li><a class="" href="banding.html"><span class="header-section-number">1</span> Banding</a></li>
+<li><a class="active" href="rain-segmentation.html"><span class="header-section-number">2</span> Rain segmentation</a></li>
+</ul>
+
+        <div class="book-extra">
+          <p><a id="book-repo" href="https://github.com/barthoekstra/clearskies">View book source <i class="fab fa-github"></i></a></p>
+        </div>
+      </nav>
+</div>
+  </header><main class="col-sm-12 col-md-9 col-lg-7" id="content"><div id="rain-segmentation" class="section level1">
+<h1>
+<span class="header-section-number">2</span> Rain segmentation<a class="anchor" aria-label="anchor" href="#rain-segmentation"><i class="fas fa-link"></i></a>
+</h1>
+<p>Classifying rain using <code>RHOHV</code> and <code>DPR</code> (depolarization ratio, Kilambi et al.) gets us most of the way for an elegant filtering procedure for rain, but the issue remains on the edges of rain clouds, where these dual-pol products or derivatives are less performant. Here, we try an image processing technique that can help improve the rain segmentation a bit further.</p>
+<div id="problem" class="section level2">
+<h2>
+<span class="header-section-number">2.1</span> Problem<a class="anchor" aria-label="anchor" href="#problem"><i class="fas fa-link"></i></a>
+</h2>
+<p>Let’s load a <code>pvol</code> with rain and show what it looks like after range-bias correction.</p>
+<div class="sourceCode" id="cb8"><pre class="downlit sourceCode r">
+<code class="sourceCode R"><span class="va">pvolfile</span> <span class="op">&lt;-</span> <span class="st">"data/20201002/NLHRW_pvol_20201002T1205_6356.h5"</span>
+<span class="va">pvol</span> <span class="op">&lt;-</span> <span class="fu">read_pvolfile</span><span class="op">(</span>file <span class="op">=</span> <span class="va">pvolfile</span>, param <span class="op">=</span> <span class="st">"all"</span><span class="op">)</span>
+<span class="va">vp</span> <span class="op">&lt;-</span> <span class="fu">calculate_vp</span><span class="op">(</span><span class="va">pvolfile</span>, verbose <span class="op">=</span> <span class="cn">FALSE</span><span class="op">)</span>
+<span class="va">ppi_rainy</span> <span class="op">&lt;-</span> <span class="fu">integrate_to_ppi</span><span class="op">(</span><span class="va">pvol</span>, <span class="va">vp</span>, xlim <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/c.html">c</a></span><span class="op">(</span><span class="op">-</span><span class="fl">180000</span>, <span class="fl">180000</span><span class="op">)</span>, ylim <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/c.html">c</a></span><span class="op">(</span><span class="op">-</span><span class="fl">180000</span>, <span class="fl">180000</span><span class="op">)</span>, res <span class="op">=</span> <span class="fl">500</span>, param <span class="op">=</span> <span class="st">"DBZH"</span><span class="op">)</span>
+<span class="fu"><a href="https://rdrr.io/r/graphics/plot.html">plot</a></span><span class="op">(</span><span class="va">ppi_rainy</span><span class="op">)</span></code></pre></div>
+<div class="inline-figure"><img src="segmentation_files/figure-html/show_rainy_ppi-1.png" width="100%"></div>
+</div>
+<div id="solution-1" class="section level2">
+<h2>
+<span class="header-section-number">2.2</span> Solution<a class="anchor" aria-label="anchor" href="#solution-1"><i class="fas fa-link"></i></a>
+</h2>
+<p>There’s clearly a lot of rain in this scan. Now, we can filter this using the depolarization ratio, but that requires some additional steps:</p>
+<ol style="list-style-type: decimal">
+<li>For some reasons not all radar rangegates have the full combination of <code>DBZH</code>, <code>DBZV</code> and <code>RHOHV</code> contained within, which means that for these pixels either the <code>ZDR</code> cannot be calculated, or <code>RHOHV</code> is not available for the calculation of the <code>DPR</code>.</li>
+<li>The edges of rain clouds are not necessarily well identified by the <code>DPR</code> (or <code>RHOHV</code> for that matter), so we need to apply some buffering/smoothing to improve this.</li>
+</ol>
+<div id="filter-pixels-without-dual-pol-measurements" class="section level3">
+<h3>
+<span class="header-section-number">2.2.1</span> Filter pixels without dual-pol measurements<a class="anchor" aria-label="anchor" href="#filter-pixels-without-dual-pol-measurements"><i class="fas fa-link"></i></a>
+</h3>
+<p>First, let’s make a plot of what pixels we lose if we filter for pixels where we can calculate the <code>DPR</code> for, which means both <code>DBZV</code> and <code>RHOHV</code> must have been available.</p>
+<div class="sourceCode" id="cb9"><pre class="downlit sourceCode r">
+<code class="sourceCode R"><span class="va">pvol_original</span> <span class="op">&lt;-</span> <span class="va">pvol</span>  <span class="co"># Let's keep the original pvol for comparison</span>
+
+<span class="va">pvol</span> <span class="op">&lt;-</span> <span class="fu">calculate_param</span><span class="op">(</span><span class="va">pvol</span>, 
+                        ZDRL <span class="op">=</span> <span class="fl">10</span> <span class="op">**</span> <span class="op">(</span><span class="op">(</span><span class="va">DBZH</span> <span class="op">-</span> <span class="va">DBZV</span><span class="op">)</span> <span class="op">/</span><span class="fl">10</span><span class="op">)</span>,
+                        DPR <span class="op">=</span> <span class="fl">10</span> <span class="op">*</span> <span class="fu"><a href="https://rdrr.io/r/base/Log.html">log10</a></span><span class="op">(</span><span class="op">(</span><span class="va">ZDRL</span> <span class="op">+</span> <span class="fl">1</span> <span class="op">-</span> <span class="fl">2</span> <span class="op">*</span> <span class="va">ZDRL</span><span class="op">^</span><span class="fl">0.5</span> <span class="op">*</span> <span class="va">RHOHV</span><span class="op">)</span> <span class="op">/</span> <span class="op">(</span><span class="va">ZDRL</span> <span class="op">+</span> <span class="fl">1</span> <span class="op">+</span> <span class="fl">2</span> <span class="op">*</span> <span class="va">ZDRL</span><span class="op">^</span> <span class="fl">0.5</span> <span class="op">*</span> <span class="va">RHOHV</span><span class="op">)</span><span class="op">)</span>,
+                        DBZHO <span class="op">=</span> <span class="va">DBZH</span><span class="op">)</span>
+
+<span class="va">pvol</span><span class="op">$</span><span class="va">scans</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/lapply.html">lapply</a></span><span class="op">(</span><span class="va">pvol</span><span class="op">$</span><span class="va">scans</span>, <span class="kw">function</span><span class="op">(</span><span class="va">x</span><span class="op">)</span> <span class="op">{</span>
+  <span class="va">x</span><span class="op">$</span><span class="va">params</span><span class="op">[[</span><span class="st">"DBZH"</span><span class="op">]</span><span class="op">]</span><span class="op">[</span><span class="fu"><a href="https://rdrr.io/r/base/NA.html">is.na</a></span><span class="op">(</span><span class="va">x</span><span class="op">$</span><span class="va">params</span><span class="op">[[</span><span class="st">"DPR"</span><span class="op">]</span><span class="op">]</span><span class="op">)</span><span class="op">]</span> <span class="op">&lt;-</span> <span class="cn">NA</span>
+  <span class="va">x</span><span class="op">$</span><span class="va">params</span><span class="op">[[</span><span class="st">"RHOHV"</span><span class="op">]</span><span class="op">]</span><span class="op">[</span><span class="fu"><a href="https://rdrr.io/r/base/NA.html">is.na</a></span><span class="op">(</span><span class="va">x</span><span class="op">$</span><span class="va">params</span><span class="op">[[</span><span class="st">"DBZH"</span><span class="op">]</span><span class="op">]</span><span class="op">)</span><span class="op">]</span> <span class="op">&lt;-</span> <span class="cn">NA</span>
+  <span class="kw"><a href="https://rdrr.io/r/base/function.html">return</a></span><span class="op">(</span><span class="va">x</span><span class="op">)</span>
+<span class="op">}</span><span class="op">)</span>
+
+<span class="va">ppiplot_rainy</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/graphics/plot.html">plot</a></span><span class="op">(</span><span class="va">ppi_rainy</span><span class="op">)</span> <span class="op">+</span> <span class="fu">ggtitle</span><span class="op">(</span><span class="st">"Original RBC PPI"</span><span class="op">)</span>
+<span class="va">ppi_dualpol</span> <span class="op">&lt;-</span> <span class="fu">integrate_to_ppi</span><span class="op">(</span><span class="va">pvol</span>, <span class="va">vp</span>, xlim <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/c.html">c</a></span><span class="op">(</span><span class="op">-</span><span class="fl">180000</span>, <span class="fl">180000</span><span class="op">)</span>, ylim <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/c.html">c</a></span><span class="op">(</span><span class="op">-</span><span class="fl">180000</span>, <span class="fl">180000</span><span class="op">)</span>, res <span class="op">=</span> <span class="fl">500</span>, param <span class="op">=</span> <span class="st">"DBZH"</span><span class="op">)</span>
+<span class="va">ppiplot_dualpol</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/graphics/plot.html">plot</a></span><span class="op">(</span><span class="va">ppi_dualpol</span><span class="op">)</span> <span class="op">+</span> <span class="fu">ggtitle</span><span class="op">(</span><span class="st">"Dual-pol available RBC PPI"</span><span class="op">)</span>
+
+<span class="va">ppiplot_rainy</span> <span class="op">+</span> <span class="va">ppiplot_dualpol</span> <span class="op">+</span> <span class="fu">plot_layout</span><span class="op">(</span>guides <span class="op">=</span> <span class="st">"collect"</span><span class="op">)</span></code></pre></div>
+<div class="inline-figure"><img src="segmentation_files/figure-html/plot_dual_pol_pixels-1.png" width="100%"></div>
+<p>We can also plot the difference, for which we make a difference of 0 transparent to better see where the PPI pixels are changed most dramatically, and we plot the differences in a histogram.</p>
+<div class="sourceCode" id="cb10"><pre class="downlit sourceCode r">
+<code class="sourceCode R"><span class="va">ppi_difference</span> <span class="op">&lt;-</span> <span class="va">ppi_dualpol</span>
+<span class="va">ppi_difference</span><span class="op">$</span><span class="va">data</span><span class="op">$</span><span class="va">VIR</span> <span class="op">&lt;-</span> <span class="va">ppi_rainy</span><span class="op">$</span><span class="va">data</span><span class="op">$</span><span class="va">VIR</span> <span class="op">-</span> <span class="va">ppi_dualpol</span><span class="op">$</span><span class="va">data</span><span class="op">$</span><span class="va">VIR</span>
+<span class="va">ppi_difference</span><span class="op">$</span><span class="va">data</span><span class="op">$</span><span class="va">VIR</span><span class="op">[</span><span class="va">ppi_difference</span><span class="op">$</span><span class="va">data</span><span class="op">$</span><span class="va">VIR</span> <span class="op">==</span> <span class="fl">0</span><span class="op">]</span> <span class="op">&lt;-</span> <span class="cn">NA</span>
+
+<span class="va">ppiplot_difference</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/graphics/plot.html">plot</a></span><span class="op">(</span><span class="va">ppi_difference</span><span class="op">)</span> <span class="op">+</span> 
+  <span class="fu">scale_fill_viridis_c</span><span class="op">(</span>trans <span class="op">=</span> <span class="st">"log10"</span><span class="op">)</span> <span class="op">+</span>
+  <span class="fu">labs</span><span class="op">(</span>fill <span class="op">=</span> <span class="st">"VIR diff"</span><span class="op">)</span> <span class="op">+</span>
+  <span class="co"># guides(fill = guide_legend(title = "VIR diff")) +</span>
+  <span class="fu">ggtitle</span><span class="op">(</span><span class="st">"Original pixels - pixels with DPR"</span><span class="op">)</span>
+
+<span class="fu"><a href="https://rdrr.io/r/base/as.data.frame.html">as.data.frame</a></span><span class="op">(</span><span class="va">ppi_difference</span><span class="op">$</span><span class="va">data</span><span class="op">)</span> <span class="op">%&gt;%</span>
+  <span class="fu">drop_na</span><span class="op">(</span><span class="op">)</span> <span class="op">%&gt;%</span>
+  <span class="fu"><a href="https://rdrr.io/r/stats/filter.html">filter</a></span><span class="op">(</span><span class="va">VIR</span> <span class="op">&lt;</span> <span class="fl">1e5</span><span class="op">)</span> <span class="op">%&gt;%</span>
+  <span class="fu">ggplot</span><span class="op">(</span><span class="op">)</span> <span class="op">+</span>
+  <span class="fu">geom_histogram</span><span class="op">(</span><span class="fu">aes</span><span class="op">(</span>x <span class="op">=</span> <span class="va">VIR</span><span class="op">)</span><span class="op">)</span> <span class="op">+</span> 
+  <span class="fu">scale_x_continuous</span><span class="op">(</span>trans <span class="op">=</span> <span class="st">"log10"</span><span class="op">)</span> <span class="op">+</span>
+  <span class="fu">labs</span><span class="op">(</span>x <span class="op">=</span> <span class="st">"VIR diff"</span><span class="op">)</span> <span class="op">-&gt;</span> <span class="va">plot_difference</span>
+
+<span class="va">ppiplot_difference</span> <span class="op">+</span> <span class="va">plot_difference</span></code></pre></div>
+<div class="inline-figure"><img src="segmentation_files/figure-html/quantify_dualpol_pixel_difference-1.png" width="100%"></div>
+<p>The PPI and histogram suggest most VIR differences occur in regions with already high reflectivities, which in this particular PPI must have been mostly rain. So filtering these pixels doesn’t hurt much. Presumably this applies across the board, but that’ll require some further investigation. Nevertheless, for now we assume filtering pixels for the presence of <code>DBZH</code> seems reasonable.</p>
+</div>
+<div id="image-processing" class="section level3">
+<h3>
+<span class="header-section-number">2.2.2</span> Image processing<a class="anchor" aria-label="anchor" href="#image-processing"><i class="fas fa-link"></i></a>
+</h3>
+<p>We start by illustrating the approach to a single scan. We use the <code>DPR</code> as the main masking methodology, though it’s possible to extend this technique to include <code>RHOHV</code>, as a combined approach may perform better. We plot a <span class="math inline">\((r,a)\)</span> plot where white pixels are classified as rain (<code>dpr &lt; -12</code>), and black pixels are not.</p>
+<div class="sourceCode" id="cb11"><pre class="downlit sourceCode r">
+<code class="sourceCode R"><span class="va">scan.dpr</span> <span class="op">&lt;-</span> <span class="fu">as.cimg</span><span class="op">(</span><span class="va">pvol</span><span class="op">$</span><span class="va">scans</span><span class="op">[[</span><span class="fl">1</span><span class="op">]</span><span class="op">]</span><span class="op">$</span><span class="va">params</span><span class="op">[[</span><span class="st">"DPR"</span><span class="op">]</span><span class="op">]</span><span class="op">)</span>
+
+<span class="op">(</span><span class="va">scan.dpr</span> <span class="op">&lt;=</span> <span class="op">-</span><span class="fl">12</span> <span class="op">&amp;</span> <span class="op">!</span><span class="fu"><a href="https://rdrr.io/r/base/NA.html">is.na</a></span><span class="op">(</span><span class="va">scan.dpr</span><span class="op">)</span><span class="op">)</span> <span class="op">%&gt;%</span>
+  <span class="fu"><a href="https://rdrr.io/r/graphics/plot.html">plot</a></span><span class="op">(</span><span class="op">)</span></code></pre></div>
+<div class="inline-figure"><img src="segmentation_files/figure-html/plot_mask-1.png" width="100%"></div>
+<p>This shows a lot of pixels, especially close to the radar (lower x-values), get flagged as rain because of the <code>DPR</code> value. This is why Kilambi et al. recommend despeckling. Let’s use a median-filter to apply this despeckling.</p>
+<div class="sourceCode" id="cb12"><pre class="downlit sourceCode r">
+<code class="sourceCode R"><span class="op">(</span><span class="va">scan.dpr</span> <span class="op">&lt;=</span> <span class="op">-</span><span class="fl">12</span> <span class="op">&amp;</span> <span class="op">!</span><span class="fu"><a href="https://rdrr.io/r/base/NA.html">is.na</a></span><span class="op">(</span><span class="va">scan.dpr</span><span class="op">)</span><span class="op">)</span> <span class="op">%&gt;%</span>
+  <span class="fu">medianblur</span><span class="op">(</span><span class="fl">4</span><span class="op">)</span> <span class="op">%&gt;%</span>
+  <span class="fu">threshold</span><span class="op">(</span><span class="fl">0</span><span class="op">)</span> <span class="op">-&gt;</span>
+  <span class="va">despeckled</span>
+
+<span class="va">despeckled</span> <span class="op">%&gt;%</span> <span class="fu"><a href="https://rdrr.io/r/graphics/plot.html">plot</a></span><span class="op">(</span><span class="op">)</span></code></pre></div>
+<div class="inline-figure"><img src="segmentation_files/figure-html/medianblur-1.png" width="100%"></div>
+<p>That already looks better, but now we have ‘blurred’ out some of the regions to larger pixels. If we assume that true rain occurs mostly in larger areas, we can compute the contiguous areas which are flagged as precipitation, calculate the surface (number of pixels within) and filter based on a minimum number of pixels. In this case, we classify rain only as rain if it covers at least 50 pixels/rangegates.</p>
+<div class="sourceCode" id="cb13"><pre class="downlit sourceCode r">
+<code class="sourceCode R"><span class="va">despeckled</span> <span class="op">%&gt;%</span>
+  <span class="fu">split_connected</span><span class="op">(</span><span class="op">)</span> <span class="op">%&gt;%</span>
+  <span class="fu">purrr</span><span class="fu">::</span><span class="fu"><a href="https://purrr.tidyverse.org/reference/keep.html">keep</a></span><span class="op">(</span><span class="op">~</span> <span class="fu"><a href="https://rdrr.io/r/base/sum.html">sum</a></span><span class="op">(</span><span class="va">.</span><span class="op">)</span> <span class="op">&gt;</span> <span class="fl">50</span><span class="op">)</span> <span class="op">%&gt;%</span>
+  <span class="fu">parany</span><span class="op">(</span><span class="op">)</span> <span class="op">-&gt;</span> <span class="va">areafilter</span>
+
+<span class="va">areafilter</span> <span class="op">%&gt;%</span> <span class="fu"><a href="https://rdrr.io/r/graphics/plot.html">plot</a></span><span class="op">(</span><span class="op">)</span></code></pre></div>
+<div class="inline-figure"><img src="segmentation_files/figure-html/despeckle-1.png" width="100%"></div>
+<p>Now, there’s a chance we miss some pixels left and right, so if we conservatively filter out rain, we could buffer these areas a bit. So, we’ll calculate the euclidean distance from non-rain to rain pixels and if that distance is &lt; 5 units, we’ll flag these pixels as rain as well.</p>
+<div class="sourceCode" id="cb14"><pre class="downlit sourceCode r">
+<code class="sourceCode R"><span class="va">areafilter</span> <span class="op">%&gt;%</span>
+  <span class="fu">distance_transform</span><span class="op">(</span><span class="fl">1</span>, metric <span class="op">=</span> <span class="fl">2</span><span class="op">)</span> <span class="op">%&gt;%</span>
+  <span class="fu">threshold</span><span class="op">(</span><span class="fl">5</span><span class="op">)</span> <span class="op">-&gt;</span> <span class="va">buffered</span>
+
+<span class="op">(</span><span class="op">-</span><span class="va">buffered</span><span class="op">)</span> <span class="op">%&gt;%</span>
+  <span class="fu"><a href="https://rdrr.io/r/graphics/plot.html">plot</a></span><span class="op">(</span><span class="op">)</span></code></pre></div>
+<div class="inline-figure"><img src="segmentation_files/figure-html/buffer-1.png" width="100%"></div>
+<p>We can now check what it looks like if we apply this masking approach to the scans and polar volumes. First we plot the single scan we’ve cleaned so far.</p>
+<div class="sourceCode" id="cb15"><pre class="downlit sourceCode r">
+<code class="sourceCode R"><span class="va">pvol_buffer</span> <span class="op">&lt;-</span> <span class="va">pvol</span>
+<span class="va">pvol_thresh</span> <span class="op">&lt;-</span> <span class="va">pvol</span>
+
+<span class="va">pvol_buffer</span><span class="op">$</span><span class="va">scans</span><span class="op">[[</span><span class="fl">1</span><span class="op">]</span><span class="op">]</span><span class="op">$</span><span class="va">params</span><span class="op">$</span><span class="va">DBZH</span><span class="op">[</span><span class="op">!</span><span class="fu"><a href="https://rdrr.io/r/base/matrix.html">as.matrix</a></span><span class="op">(</span><span class="va">buffered</span><span class="op">)</span><span class="op">]</span> <span class="op">&lt;-</span> <span class="cn">NA</span>
+<span class="va">pvol_thresh</span><span class="op">$</span><span class="va">scans</span><span class="op">[[</span><span class="fl">1</span><span class="op">]</span><span class="op">]</span><span class="op">$</span><span class="va">params</span><span class="op">$</span><span class="va">DBZH</span><span class="op">[</span><span class="va">pvol_thresh</span><span class="op">$</span><span class="va">scans</span><span class="op">[[</span><span class="fl">1</span><span class="op">]</span><span class="op">]</span><span class="op">$</span><span class="va">params</span><span class="op">$</span><span class="va">DPR</span> <span class="op">&lt;</span> <span class="op">-</span><span class="fl">12</span> <span class="op">|</span> <span class="va">pvol_thresh</span><span class="op">$</span><span class="va">scans</span><span class="op">[[</span><span class="fl">1</span><span class="op">]</span><span class="op">]</span><span class="op">$</span><span class="va">params</span><span class="op">$</span><span class="va">RHOHV</span> <span class="op">&gt;=</span> <span class="fl">0.95</span><span class="op">]</span> <span class="op">&lt;-</span> <span class="cn">NA</span>
+
+<span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/graphics/plot.html">plot</a></span><span class="op">(</span><span class="va">pvol_original</span><span class="op">$</span><span class="va">scans</span><span class="op">[[</span><span class="fl">1</span><span class="op">]</span><span class="op">]</span>, xlim <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/c.html">c</a></span><span class="op">(</span><span class="fl">0</span>, <span class="fl">180000</span><span class="op">)</span><span class="op">)</span> <span class="op">+</span> <span class="fu">ggtitle</span><span class="op">(</span><span class="st">"Original PVOL"</span><span class="op">)</span><span class="op">)</span> <span class="op">/</span>
+  <span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/graphics/plot.html">plot</a></span><span class="op">(</span><span class="va">pvol_thresh</span><span class="op">$</span><span class="va">scans</span><span class="op">[[</span><span class="fl">1</span><span class="op">]</span><span class="op">]</span>, xlim <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/c.html">c</a></span><span class="op">(</span><span class="fl">0</span>, <span class="fl">180000</span><span class="op">)</span><span class="op">)</span> <span class="op">+</span> <span class="fu">ggtitle</span><span class="op">(</span><span class="st">"Simple threshold filter"</span><span class="op">)</span><span class="op">)</span> <span class="op">/</span>
+  <span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/graphics/plot.html">plot</a></span><span class="op">(</span><span class="va">pvol_buffer</span><span class="op">$</span><span class="va">scans</span><span class="op">[[</span><span class="fl">1</span><span class="op">]</span><span class="op">]</span>, xlim <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/c.html">c</a></span><span class="op">(</span><span class="fl">0</span>, <span class="fl">180000</span><span class="op">)</span><span class="op">)</span> <span class="op">+</span> <span class="fu">ggtitle</span><span class="op">(</span><span class="st">"Buffered threshold filter"</span><span class="op">)</span><span class="op">)</span></code></pre></div>
+<div class="inline-figure"><img src="segmentation_files/figure-html/plot_scan_filters-1.png" width="672"></div>
+<p>Except for the continuing presence of some interference pattern, and possibly filtering out some areas with ground clutter or wind parks, we see a much cleaner rain filtering than before in the buffered threshold filter.</p>
+<p>Now let’s apply it to the full <code>pvol</code>.</p>
+<div class="sourceCode" id="cb16"><pre class="downlit sourceCode r">
+<code class="sourceCode R"><span class="va">rainfilter</span> <span class="op">&lt;-</span> <span class="kw">function</span><span class="op">(</span><span class="va">scan</span><span class="op">)</span> <span class="op">{</span>
+  <span class="kw">if</span> <span class="op">(</span><span class="va">scan</span><span class="op">$</span><span class="va">geo</span><span class="op">$</span><span class="va">elangle</span> <span class="op">&lt;</span> <span class="fl">90</span><span class="op">)</span> <span class="op">{</span>
+    <span class="va">dpr</span> <span class="op">&lt;-</span> <span class="fu">as.cimg</span><span class="op">(</span><span class="va">scan</span><span class="op">$</span><span class="va">params</span><span class="op">[[</span><span class="st">"DPR"</span><span class="op">]</span><span class="op">]</span><span class="op">)</span>
+    <span class="op">(</span><span class="va">dpr</span> <span class="op">&lt;=</span> <span class="op">-</span><span class="fl">12</span> <span class="op">&amp;</span> <span class="op">!</span><span class="fu"><a href="https://rdrr.io/r/base/NA.html">is.na</a></span><span class="op">(</span><span class="va">dpr</span><span class="op">)</span><span class="op">)</span> <span class="op">%&gt;%</span>
+      <span class="fu">medianblur</span><span class="op">(</span><span class="fl">4</span><span class="op">)</span> <span class="op">%&gt;%</span>  <span class="co"># Works adequate for de-speckling</span>
+      <span class="fu">threshold</span><span class="op">(</span><span class="fl">0</span><span class="op">)</span> <span class="op">%&gt;%</span>  <span class="co"># Set all pixels that have been affected by median blurring to 1, rest to 0</span>
+      <span class="fu">split_connected</span><span class="op">(</span><span class="op">)</span> <span class="op">%&gt;%</span>  <span class="co"># Split image in contiguous areas classified as rain</span>
+      <span class="fu">purrr</span><span class="fu">::</span><span class="fu"><a href="https://purrr.tidyverse.org/reference/keep.html">keep</a></span><span class="op">(</span><span class="op">~</span> <span class="fu"><a href="https://rdrr.io/r/base/sum.html">sum</a></span><span class="op">(</span><span class="va">.</span><span class="op">)</span> <span class="op">&gt;</span> <span class="fl">50</span><span class="op">)</span> <span class="op">%&gt;%</span>  <span class="co"># Only keep contiguous rain areas if area is &gt; 50 pixels</span>
+      <span class="fu">parany</span><span class="op">(</span><span class="op">)</span> <span class="op">-&gt;</span> <span class="va">contiguous</span>  <span class="co"># Merge to 1 image again</span>
+    <span class="kw">if</span> <span class="op">(</span><span class="op">!</span><span class="fu"><a href="https://rdrr.io/r/base/NULL.html">is.null</a></span><span class="op">(</span><span class="va">contiguous</span><span class="op">)</span><span class="op">)</span> <span class="op">{</span>  <span class="co"># Only buffer if any rain areas of &gt; 50 pixels are retained</span>
+      <span class="va">contiguous</span> <span class="op">%&gt;%</span>
+        <span class="fu">distance_transform</span><span class="op">(</span><span class="fl">1</span>, <span class="fl">2</span><span class="op">)</span> <span class="op">%&gt;%</span>  <span class="co"># Calculate Euclidean distance (2nd argument) to pixels classified as 1</span>
+        <span class="fu">threshold</span><span class="op">(</span><span class="fl">5</span><span class="op">)</span> <span class="op">-&gt;</span> <span class="va">dpr_filter</span>
+      
+      <span class="va">dpr_filter</span> <span class="op">&lt;-</span> <span class="op">-</span><span class="va">dpr_filter</span>
+      <span class="va">scan</span><span class="op">$</span><span class="va">params</span><span class="op">$</span><span class="va">DBZH</span><span class="op">[</span><span class="op">!</span><span class="fu"><a href="https://rdrr.io/r/base/matrix.html">as.matrix</a></span><span class="op">(</span><span class="va">dpr_filter</span><span class="op">)</span><span class="op">]</span> <span class="op">&lt;-</span> <span class="cn">NA</span> 
+    <span class="op">}</span>
+  <span class="op">}</span>
+  <span class="kw"><a href="https://rdrr.io/r/base/function.html">return</a></span><span class="op">(</span><span class="va">scan</span><span class="op">)</span>
+<span class="op">}</span>
+
+<span class="va">pvol</span><span class="op">$</span><span class="va">scans</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/lapply.html">lapply</a></span><span class="op">(</span><span class="va">pvol</span><span class="op">$</span><span class="va">scans</span>, <span class="kw">function</span><span class="op">(</span><span class="va">x</span><span class="op">)</span> <span class="op">{</span>
+  <span class="va">x</span><span class="op">$</span><span class="va">params</span><span class="op">[[</span><span class="st">"DBZH"</span><span class="op">]</span><span class="op">]</span><span class="op">[</span><span class="fu"><a href="https://rdrr.io/r/base/NA.html">is.na</a></span><span class="op">(</span><span class="va">x</span><span class="op">$</span><span class="va">params</span><span class="op">[[</span><span class="st">"DPR"</span><span class="op">]</span><span class="op">]</span><span class="op">)</span><span class="op">]</span> <span class="op">&lt;-</span> <span class="cn">NA</span>
+  <span class="co"># x$params[["DBZH"]][x$params[["RHOHV"]] &gt;= 0.95] &lt;- NA</span>
+  <span class="co"># x$params[["DBZH"]][x$params[["DPR"]] &lt; -12] &lt;- NA</span>
+  <span class="va">x</span> <span class="op">&lt;-</span> <span class="fu">rainfilter</span><span class="op">(</span><span class="va">x</span><span class="op">)</span>
+  <span class="kw"><a href="https://rdrr.io/r/base/function.html">return</a></span><span class="op">(</span><span class="va">x</span><span class="op">)</span>
+<span class="op">}</span><span class="op">)</span></code></pre></div>
+<p>And once again, calculate RBC and plot the resulting PPI.</p>
+<div class="sourceCode" id="cb17"><pre class="downlit sourceCode r">
+<code class="sourceCode R"><span class="va">ppi_buffered</span> <span class="op">&lt;-</span> <span class="fu">integrate_to_ppi</span><span class="op">(</span><span class="va">pvol</span>, <span class="va">vp</span>, xlim <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/c.html">c</a></span><span class="op">(</span><span class="op">-</span><span class="fl">180000</span>, <span class="fl">180000</span><span class="op">)</span>, ylim <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/c.html">c</a></span><span class="op">(</span><span class="op">-</span><span class="fl">180000</span>, <span class="fl">180000</span><span class="op">)</span>, res <span class="op">=</span> <span class="fl">500</span>, param <span class="op">=</span> <span class="st">"DBZH"</span><span class="op">)</span>
+<span class="va">ppiplot_buffered</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/graphics/plot.html">plot</a></span><span class="op">(</span><span class="va">ppi_buffered</span><span class="op">)</span> <span class="op">+</span> <span class="fu">ggtitle</span><span class="op">(</span><span class="st">"Buffered rain filtering"</span><span class="op">)</span>
+
+<span class="op">(</span><span class="va">ppiplot_rainy</span> <span class="op">+</span> <span class="fu">ggtitle</span><span class="op">(</span><span class="st">"Original RBC PPI"</span><span class="op">)</span><span class="op">)</span> <span class="op">+</span> <span class="va">ppiplot_buffered</span> <span class="op">+</span> <span class="fu">plot_layout</span><span class="op">(</span>guides <span class="op">=</span> <span class="st">"collect"</span><span class="op">)</span></code></pre></div>
+<div class="inline-figure"><img src="segmentation_files/figure-html/plot_final_cleaning-1.png" width="672"></div>
+<p>At first sight the RBC PPI may look quite messy after filtering, but overall this approach seems to work quite well:</p>
+<ol style="list-style-type: decimal">
+<li>Most of the edges of rain clouds are removed quite well, with the exception of those at &gt; 80km from the radar, but this is probably mostly due to dual-pol measurements not working well anymore at these distances anyways.</li>
+<li>We can still apply post-processing to the RBC PPIs, for example by filtering out pixels which have too high values of <code>VIR</code> for them to be birds. Or to simply despeckle, or calculate a median value across the whole image.</li>
+<li>We have now applied a single buffering procedure to all the scans at all elevations, but this could possibly be tweaked further for each elevation. At higher elevations, we can probably filter quite agressively, and especially if we also include altitude above the ground in our filtering approach.</li>
+<li>Many of the speckles that are visible are not necessarily rain, but were already present in the original RBC PPI, so this approach definitely did not worsen this issue much.</li>
+</ol>
+</div>
+</div>
+</div>
+  <div class="chapter-nav">
+<div class="prev"><a href="banding.html"><span class="header-section-number">1</span> Banding</a></div>
+<div class="empty"></div>
+</div></main><div class="col-md-3 col-lg-2 d-none d-md-block sidebar sidebar-chapter">
+    <nav id="toc" data-toggle="toc" aria-label="On this page"><h2>On this page</h2>
+      <ul class="nav navbar-nav">
+<li><a class="nav-link" href="#rain-segmentation"><span class="header-section-number">2</span> Rain segmentation</a></li>
+<li><a class="nav-link" href="#problem"><span class="header-section-number">2.1</span> Problem</a></li>
+<li>
+<a class="nav-link" href="#solution-1"><span class="header-section-number">2.2</span> Solution</a><ul class="nav navbar-nav">
+<li><a class="nav-link" href="#filter-pixels-without-dual-pol-measurements"><span class="header-section-number">2.2.1</span> Filter pixels without dual-pol measurements</a></li>
+<li><a class="nav-link" href="#image-processing"><span class="header-section-number">2.2.2</span> Image processing</a></li>
+</ul>
+</li>
+</ul>
+
+      <div class="book-extra">
+        <ul class="list-unstyled">
+<li><a id="book-source" href="https://github.com/barthoekstra/clearskies/blob/master/segmentation.Rmd">View source <i class="fab fa-github"></i></a></li>
+          <li><a id="book-edit" href="https://github.com/barthoekstra/clearskies/edit/master/segmentation.Rmd">Edit this page <i class="fab fa-github"></i></a></li>
+        </ul>
+</div>
+    </nav>
+</div>
+
+</div>
+</div> <!-- .container -->
+
+<footer class="bg-primary text-light mt-5"><div class="container"><div class="row">
+
+  <div class="col-12 col-md-6 mt-3">
+    <p>"<strong>Clear Skies</strong>: Filtering of Dutch weather radar data" was written by Bart Hoekstra. </p>
+  </div>
+
+  <div class="col-12 col-md-6 mt-3">
+    <p>This book was built by the <a class="text-light" href="https://bookdown.org">bookdown</a> R package.</p>
+  </div>
+
+</div></div>
+</footer><!-- dynamically load mathjax for compatibility with self-contained --><script>
+  (function () {
+    var script = document.createElement("script");
+    script.type = "text/javascript";
+    var src = "true";
+    if (src === "" || src === "true") src = "https://mathjax.rstudio.com/latest/MathJax.js?config=TeX-MML-AM_CHTML";
+    if (location.protocol !== "file:")
+      if (/^https?:/.test(src))
+        src = src.replace(/^https?:/, '');
+    script.src = src;
+    document.getElementsByTagName("head")[0].appendChild(script);
+  })();
+</script>
+</body>
+</html>
