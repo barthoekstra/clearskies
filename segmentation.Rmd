@@ -1,4 +1,4 @@
-# Rain segmentation
+# Simple rain segmentation
 
 Classifying rain using `RHOHV` and `DPR` (depolarization ratio, Kilambi et al.) gets us most of the way for an elegant filtering procedure for rain, but the issue remains on the edges of rain clouds, where these dual-pol products or derivatives are less performant. Here, we try an image processing technique that can help improve the rain segmentation a bit further.
 
@@ -184,7 +184,8 @@ ppiplot_buffered <- plot(ppi_buffered) + ggtitle("Buffered rain filtering")
 
 At first sight the RBC PPI may look quite messy after filtering, but overall this approach seems to work quite well:
 
-1. Most of the edges of rain clouds are removed quite well, with the exception of those at > 80km from the radar, but this is probably mostly due to dual-pol measurements not working well anymore at these distances anyways.
+1. Most of the edges of rain clouds are removed quite well, with mostly the exception of those at > 80km from the radar, but this is probably mostly due to dual-pol measurements not working well anymore at these distances anyways.
 1. We can still apply post-processing to the RBC PPIs, for example by filtering out pixels which have too high values of `VIR` for them to be birds. Or to simply despeckle, or calculate a median value across the whole image.
 1. We have now applied a single buffering procedure to all the scans at all elevations, but this could possibly be tweaked further for each elevation. At higher elevations, we can probably filter quite agressively, and especially if we also include altitude above the ground in our filtering approach.
 1. Many of the speckles that are visible are not necessarily rain, but were already present in the original RBC PPI, so this approach definitely did not worsen this issue much.
+1. Finally, as the outcome of the range-bias correction is a projection of the integrated reflections on a cartesian grid, we could consider to vertically stack all rain segmentations after projecting them from slant to ground range and then using this combined mask to filter out the entire regions covered by rain. This assumes rain clouds always stretch vertically along the full altitude range covered by the radar, which may not be realistic, but to create a clean and interpretable RBC PPI this could be an acceptable trade-off.
