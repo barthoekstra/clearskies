@@ -1,7 +1,7 @@
 banding
 the-problem
 solution
-rain-segmentation
+simple-rain-segmentation
 problem
 solution-1
 filter-pixels-without-dual-pol-measurements
