@@ -9,6 +9,7 @@ library(sf)
 library(raster)
 
 visual_filter <- function(pvolfile) {
+  rl <- 100000  # Was 160000
   # 0. Load pvol
   print("Loading pvol")
   pvol <- read_pvolfile(pvolfile, param = c("DBZH", "DBZV", "RHOHV"))
@@ -34,7 +35,6 @@ visual_filter <- function(pvolfile) {
   }))
 
   pvol$scans[[lowest_dualprf_scan]] <- NULL
-  pvol$scans[[]]
 
   # 3. Classify rain
   ## Calculate DPR
@@ -53,9 +53,25 @@ visual_filter <- function(pvolfile) {
 
   ## Create rainmasks
   print("Creating rainmasks")
+  
+  vp <- read_vpfiles(vp_file_name(pvolfile))
+  lon <- vp$attributes$where$lon
+  lat <- vp$attributes$where$lat
+  e <- ((s <- st_point(c(lon, lat)) %>% st_sfc() %>% st_set_crs(4326) %>% st_transform(3857) %>% as_Spatial()) %>% extent()) + 160000 * 2
+  ras <- raster::raster(e, resolution = 500, crs = CRS(proj4string(s)))
+  # proj4 <- CRS(paste("+proj=aeqd +lat_0=", lat, " +lon_0=", lon, " +units=m", sep = ""))
+  # e_rain <- projectExtent(ras, proj4)
+  # ras_rain <- raster::raster(e_rain)
+  # proj4 <- "+proj=longlat +datum=WGS84 +no_defs +ellps=WGS84 +towgs84=0,0,0"
+  # newext <- extent(projectExtent(ras,"+proj=longlat +datum=WGS84 +no_defs +ellps=WGS84 +towgs84=0,0,0"))
+  # ras_rain <- raster::raster(newext, resolution = 500, crs = CRS(proj4))
+  
   masks <- lapply(pvol$scans, function(x) {
     if (x$geo$elangle < 90) {
-      ppi <- project_as_ppi(get_param(x, "DPR"), grid_size = 500, range_max = 160000)
+      # ppi <- project_as_ppi(get_param(x, "DPR"), grid_size = 500, range_max = rl)
+      # ppi <- project_as_ppi(get_param(x, "DPR"), grid_size = (rl*2) / 640, range_max = rl)
+      ppi <- project_as_ppi(get_param(x, "DPR"), grid_size = ras)
+      # ppi <- project_as_ppi(get_param(x, "DPR"), grid_size = 500, range_max = round(mean(abs(as.matrix(ras_rain@extent))), -3))
       dpr <- as.cimg(as.matrix(ppi$data))
       (dpr <= -12 & !is.na(dpr)) %>%
         clean(4) %>%  # Remove speckles by shrinking then growing using a 4px radius
@@ -106,14 +122,12 @@ visual_filter <- function(pvolfile) {
 
   # 4. Apply RBC
   print("Apply RBC")
-  vp <- read_vpfiles(vp_file_name(pvolfile))
-  lon <- vp$attributes$where$lon
-  lat <- vp$attributes$where$lat
-  e <- ((s <- st_point(c(lon, lat)) %>% st_sfc() %>% st_set_crs(4326) %>% st_transform(3857) %>% as_Spatial()) %>% extent()) + 160000 * 2
-  ras <- raster::raster(e, resolution = 500, crs = CRS(proj4string(s)))
+
   bioRad::sd_vvp_threshold(vp) <- 2
-  rbc <- integrate_to_ppi(pvol, vp, xlim = c(-160000, 160000), ylim = c(-160000, 160000), res = 500, param = "DBZH")
-  # rbc <- integrate_to_ppi(pvol, vp, raster = ras, param = "DBZH")
+  # rbc <- integrate_to_ppi(pvol, vp, xlim = c(-160000, 160000), ylim = c(-160000, 160000), res = 500, param = "DBZH")
+  # rbc <- integrate_to_ppi(pvol, vp, xlim = c(-rl, rl), ylim = c(-rl, rl), res = 500, param = "DBZH")
+  # rbc <- integrate_to_ppi(pvol, vp, xlim = c(-rl, rl), ylim = c(-rl, rl), res = (rl*2) / 640, param = "DBZH")
+  rbc <- integrate_to_ppi(pvol, vp, raster = ras, param = "DBZH")
   # pvol_low <- pvol
   # pvol_low$scans <- pvol_low$scans[low_elevations]
   # rbc_low <- integrate_to_ppi(pvol_low, vp, raster = ras, param = "DBZH")
@@ -338,15 +352,24 @@ vp_file_name <- function(pvolfile) {
 cores <- 6
 # files <- list.files(path = "data/20201001", full.names = TRUE)
 # processing1 <- pbmclapply(files, visual_filter, mc.cores = cores, mc.preschedule = FALSE, mc.silent = FALSE)
-# saveRDS(processing1, file = paste0("data/20201001_processing_2.RDS"))
-# 
-# files2 <- list.files(path = "data/20201002", full.names = TRUE)
-# processing2 <- pbmclapply(files2, visual_filter, mc.cores = cores, mc.preschedule = FALSE, mc.silent = FALSE)
-# saveRDS(processing2, file = paste0("data/20201002_processing_2.RDS"))
+# saveRDS(processing1, file = paste0("data/20201001_processing_3.RDS"))
+
+files2 <- list.files(path = "data/20201002", full.names = TRUE)
+processing2 <- pbmclapply(files2, visual_filter, mc.cores = cores, mc.preschedule = FALSE, mc.silent = FALSE)
+saveRDS(processing2, file = paste0("data/20201002_processing_3.RDS"))
 
 # reprocess <- sapply(processing1, function(x) !is.null(x))
 
-# visual_filter(files[[140]])
-visual_filter("data/20201001/NLHRW_pvol_20201001T1740_6356.h5")
+# visual_filter(files[[1]])
+# visual_filter("data/20201001/NLHRW_pvol_20201001T1740_6356.h5")
 
 # visual_filter("data/20201002/NLHRW_pvol_20201002T1205_6356.h5")
+
+files_rbc <- list.files(path = "data/RBC", full.names = TRUE)
+files_dropbox <- paste0("UvA/ClearSkies/Data/", basename(files_rbc))
+
+
+# mapply(function(x, y) drop_upload(x, path = "UvA/ClearSkies/", mode = "add", verbose = FALSE, dtoken = token), files_rbc, files_dropbox)
+lapply(files_rbc, function(x) drop_upload(x, path = "UvA/ClearSkies/", mode = "add", verbose = FALSE, dtoken = token))
+
+
