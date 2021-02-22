@@ -47,6 +47,6 @@ plot_ppi_vis <- function(filepath) {
 # plot_ppi_vis(filepath)
 # plot_ppi_vis("data/RBC/RDS/NLDHL_RBC_20201002T0540.RDS")
 # lapply(files, plot_ppi_vis)
-# cores <- 6
-# processing <- pbmclapply(files, plot_ppi_vis, mc.cores = cores, mc.preschedule = FALSE, mc.silent = FALSE)
-plot_ppi_vis("data/RBC/RDS/NLHRW_RBC_20201001T1740.RDS")
+cores <- 6
+processing <- pbmclapply(files, plot_ppi_vis, mc.cores = cores, mc.preschedule = FALSE, mc.silent = FALSE)
+# plot_ppi_vis("data/RBC/RDS/NLHRW_RBC_20201001T1740.RDS")
