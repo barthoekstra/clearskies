@@ -7,6 +7,7 @@ library(ncdf4)
 library(pbmcapply)
 library(sf)
 library(raster)
+library(rdrop2)
 
 visual_filter <- function(pvolfile) {
   rl <- 100000  # Was 160000
@@ -154,6 +155,17 @@ visual_filter <- function(pvolfile) {
   
   saveRDS(rbc, file = paste0("data/RBC/RDS/", str_replace(rbc_file_name(rbc_dset), ".nc", ".RDS")))
   save_rbc_nc(rbc_dset)
+  
+  if (pvol$radar == "NL52") {
+    drop_upload(paste0("data/RBC/", rbc_file_name(rbc_dset)), 
+                path = "UvA/ClearSkies/NLHRW20181019/", mode = "add", verbose = FALSE, dtoken = token)
+    print(paste0("Uploaded NLHRW data to Dropbox: ", rbc_file_name(rbc_dset)))
+  }
+  if (pvol$radar == "NL51") {
+    drop_upload(paste0("data/RBC/", rbc_file_name(rbc_dset)), 
+                path = "UvA/ClearSkies/NLDHL20181019/", mode = "add", verbose = FALSE, dtoken = token)
+    print(paste0("Uploaded NLDHL data to Dropbox: ", rbc_file_name(rbc_dset)))
+  }
 }
 
 range_coverage <- function(scan) {
@@ -349,27 +361,29 @@ vp_file_name <- function(pvolfile) {
   return(fname)
 }
 
-cores <- 6
+token <- readRDS("token.RDS")
+
+cores <- 7
 # files <- list.files(path = "data/20201001", full.names = TRUE)
 # processing1 <- pbmclapply(files, visual_filter, mc.cores = cores, mc.preschedule = FALSE, mc.silent = FALSE)
 # saveRDS(processing1, file = paste0("data/20201001_processing_3.RDS"))
 
-files2 <- list.files(path = "data/20201002", full.names = TRUE)
-processing2 <- pbmclapply(files2, visual_filter, mc.cores = cores, mc.preschedule = FALSE, mc.silent = FALSE)
-saveRDS(processing2, file = paste0("data/20201002_processing_3.RDS"))
+# files2 <- list.files(path = "data/20201002", full.names = TRUE)
+files <- list.files(path = "data/20181019/", full.names = TRUE)
+processing2 <- pbmclapply(files, visual_filter, mc.cores = cores, mc.preschedule = FALSE, mc.silent = FALSE)
+saveRDS(processing2, file = paste0("data/20201002_processing_5.RDS"))
 
 # reprocess <- sapply(processing1, function(x) !is.null(x))
 
-# visual_filter(files[[1]])
+# visual_filter(files[1])
+# visual_filter(files[410])
 # visual_filter("data/20201001/NLHRW_pvol_20201001T1740_6356.h5")
 
 # visual_filter("data/20201002/NLHRW_pvol_20201002T1205_6356.h5")
 
-files_rbc <- list.files(path = "data/RBC", full.names = TRUE)
-files_dropbox <- paste0("UvA/ClearSkies/Data/", basename(files_rbc))
+# files_rbc <- list.files(path = "data/RBC", full.names = TRUE)
+# files_dropbox <- paste0("UvA/ClearSkies/Data/", basename(files_rbc))
 
 
-# mapply(function(x, y) drop_upload(x, path = "UvA/ClearSkies/", mode = "add", verbose = FALSE, dtoken = token), files_rbc, files_dropbox)
-lapply(files_rbc, function(x) drop_upload(x, path = "UvA/ClearSkies/", mode = "add", verbose = FALSE, dtoken = token))
-
-
+# mapply(function(x, y) drop_upload(x, path = "UvA/ClearSkies/Data_bioRad_Defaults/", mode = "add", verbose = FALSE, dtoken = token), files_rbc, files_dropbox)
+# lapply(files_rbc, function(x) drop_upload(x, path = "UvA/ClearSkies/Data_bioRad_Defaults", mode = "add", verbose = FALSE, dtoken = token))
