@@ -1,0 +1,203 @@
+# EM Interference
+
+```{r load_packages, include=FALSE}
+library(tidyverse)
+library(bioRad)
+library(imager)
+library(patchwork)
+library(raster)
+library(pracma)
+```
+
+```{r}
+pvolfile <- "data/20201002/NLHRW_pvol_20201002T1205_6356.h5"
+# pvolfile <- "data/20201001/NLHRW_pvol_20201001T0955_6356.h5"
+# pvolfile <- "data/20201001/NLHRW_pvol_20201001T0000_6356.h5"
+pvol <- read_pvolfile(file = pvolfile, param = "all")
+pvol <- calculate_param(pvol, 
+                        ZDRL = 10 ** ((DBZH - DBZV) /10),
+                        DPR = 10 * log10((ZDRL + 1 - 2 * ZDRL^0.5 * RHOHV) / (ZDRL + 1 + 2 * ZDRL^ 0.5 * RHOHV)))
+ppi <- project_as_ppi(pvol$scans[[1]], range_max = 180000, grid_size = 500)
+plot(ppi)
+```
+
+```{r}
+plot(pvol$scans[[1]], xlim = c(0, 180000))
+plot(pvol$scans[[1]], xlim = c(0, 180000), ylim = c(70, 110))
+```
+
+```{r}
+range_coverage <- function(scan) {
+  s <- as.matrix(scan$params$DBZH)
+  class(s) <- "matrix"
+  
+  hasvalue <- s
+  hasvalue[!is.na(s)] <- 1
+  coverage <- colSums(hasvalue, na.rm = TRUE)
+  coverage / dim(s)[1]
+}
+
+hist(range_coverage(pvol$scans[[1]]))
+```
+
+```{r}
+calc_linearity <- function(scan) {
+  s <- as.matrix(scan$params$DBZH)
+  class(s) <- "matrix"
+
+  apply(s, 2, function(d) {
+    nearestbin <- round(50000 / scan$geo$rscale)
+    r <- nearestbin:dim(s)[1]
+    dbzh <- d[r]
+    data <- data.frame(r = r, dbzh = dbzh) %>% drop_na()
+    if (nrow(data) > 20) {
+      m <- lm(dbzh ~ r, data = data)
+      if (coef(m)[2] > 0) {  # Only return non-NA if slope is positive
+        summary(m)$r.squared
+      } else {
+        NA
+      }
+    } else {
+      NA
+    }
+  })
+}
+hist(calc_linearity(pvol$scans[[1]]))
+```
+
+```{r}
+classified_em <- which(calc_linearity(pvol$scans[[1]]) > 0.75 & range_coverage(pvol$scans[[1]]) > 0.75)
+classified_em <- sort(unique(c(classified_em - c(1), classified_em, classified_em + c(1))))
+classified_em
+```
+
+
+```{r}
+interpolate_em <- function(scan, beams) {
+  s <- as.matrix(scan$params$DBZH)
+  class(s) <- "matrix"
+  
+  consecutive_beams <- split(beams, cumsum(c(1, diff(beams) != 1)))
+  
+  for (cb in consecutive_beams) {
+    extract_beams <- c(min(cb) - 1, cb, max(cb) + 1)
+    m <- s[, extract_beams]
+    m[is.na(m)] <- -9999
+    m[, 2:(length(extract_beams) - 1)] <- NA
+    x <- 1:dim(m)[1]  # Ranges
+    y <- c(1, length(extract_beams))  # Azimuths
+    z <- t(m[x, y])
+    xp <- x
+    yp <- 2:(length(extract_beams) - 1)
+    ip <- expand.grid(x, yp)
+    mi <- matrix(interp2(x, y, z, ip[, 1], ip[, 2], method = "nearest"), nrow = length(x))
+    mi[mi == -9999] <- NA
+    # Now that we have interpolated NA values using nearest-neighbor, we can interpolate reflectivity
+    ip2 <- which(!is.na(mi), arr.ind = TRUE)
+    mp <- interp2(x, y, z, ip2[, 1], ip2[, 2], method = "linear")
+    mi[cbind(ip2[, 1], ip2[, 2])] <- mp
+    s[, cb] <- mi
+  }
+  
+  scan$params$DBZH <- s
+  return(scan)
+}
+plot(interpolate_em(pvol$scans[[1]], classified_em))
+```
+```{r}
+p <- pvol
+p$scans <- lapply(p$scans, function(x) {
+  classified_em <- which(calc_linearity(x) > 0.75 & range_coverage(x) > 0.75)
+  classified_em <- sort(unique(c(classified_em - c(1), classified_em, classified_em + c(1))))
+  print(classified_em)
+  if (length(classified_em) > 0) {
+    x <- interpolate_em(x, classified_em)
+  }
+  x
+})
+plot(project_as_ppi(p$scans[[4]], grid_size = 500, range_max = 180000))
+vp <- calculate_vp(pvolfile, verbose = FALSE)
+ppi <- integrate_to_ppi(p, vp, xlim = c(-180000, 180000), ylim = c(-180000, 180000), res = 500, param = "DBZH")
+plot(ppi)
+```
+
+```{r}
+p <- pvol
+identify_em_interference <- function(pvol) {
+  beams <- lapply(pvol$scans, function(x) {
+    classified_em <- which(calc_linearity(x) > 0.75 & range_coverage(x) > 0.75)
+    classified_em <- sort(unique(c(classified_em - c(1), classified_em, classified_em + c(1))))
+    classified_em
+  })
+  
+  elevs <- round(get_elevation_angles(pvol), 1)
+  
+  beams <- lapply(elevs, function(x) {
+    identical <- which(elevs == x)
+    if (length(identical) > 0) {
+      b <- unique(unlist(beams[identical]))
+    } else {
+      NULL
+    }
+  })
+  beams
+}
+beams <- identify_em_interference(p)
+
+p$scans <- mapply(function(x, y) {
+  if (length(y) > 0) {
+    interpolate_em(x, y)
+  } else {
+    x
+  }
+}, pvol$scans, beams, SIMPLIFY = FALSE)
+ppi <- integrate_to_ppi(p, vp, xlim = c(-180000, 180000), ylim = c(-180000, 180000), res = 500, param = "DBZH")
+plot(ppi)
+```
+
+```{r}
+m <- as.matrix(pvol$scans[[1]]$params$DBZH)[, 95:105]
+class(m) <- "matrix"
+
+hasvalue <- m
+hasvalue[!is.na(hasvalue)] <- 1
+
+covAbove90 <- which(colSums(hasvalue, na.rm = TRUE) / dim(hasvalue)[1] > 0.90)
+x <- 200:dim(hasvalue)[1]
+y1 <- m[200:dim(hasvalue)[1], 6]
+
+plot(x, y1)
+
+```
+
+
+```{r}
+  apply(s, 2, function(d) {
+    nearestbin <- round(50000 / pvol$scans[[1]]$geo$rscale)
+    x <- nearestbin:dim(s)[1]
+    print(x)
+    y <- s[x]
+    print(y)
+    m <- lm(y ~ x, data = data.frame(x = x, y = y) %>% drop_na())
+    summary(m)$r.squared
+  })
+```
+
+
+```{r}
+a <- data.frame(x = x, y = y1) %>%
+  drop_na()
+
+m1 <- lm(y ~ x, data = a)
+summary(m1)
+plot(m1)
+```
+
+
+
+
+
+
+
+
+

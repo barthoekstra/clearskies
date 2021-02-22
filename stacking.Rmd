@@ -1,0 +1,433 @@
+# Rain stacking
+
+We follow a similar approach as outlined in the rain segmentation approach, but this time we 'stack' the segmented across the different elevation scans, in essence to filter all scans from rain using the calculated maximum spatial extent of a rain cloud.
+
+```{r load_packages, include=FALSE}
+library(tidyverse)
+library(bioRad)
+library(imager)
+library(patchwork)
+library(raster)
+```
+
+## Problem
+
+Let's load a `pvol` with rain and show what it looks like after range-bias correction.
+
+```{r show_rain_filtering, warning=FALSE, message=FALSE, out.width='100%', echo=FALSE}
+pvolfile <- "data/20201002/NLHRW_pvol_20201002T1205_6356.h5"
+# pvolfile <- "data/20201002/NLHRW_pvol_20201002T2040_6356.h5"
+# pvolfile <- "data/20201001/NLHRW_pvol_20201001T2040_6356.h5"
+pvol <- read_pvolfile(file = pvolfile, param = "all")
+pvol <- calculate_param(pvol, 
+                        ZDRL = 10 ** ((DBZH - DBZV) /10),
+                        DPR = 10 * log10((ZDRL + 1 - 2 * ZDRL^0.5 * RHOHV) / (ZDRL + 1 + 2 * ZDRL^ 0.5 * RHOHV)),
+                        DBZHO = DBZH,
+                        RAIN = DBZH,
+                        RAINSTACK = DBZH)
+
+vp <- calculate_vp(pvolfile, verbose = FALSE)
+ppi_rainy <- integrate_to_ppi(pvol, vp, xlim = c(-180000, 180000), ylim = c(-180000, 180000), res = 500, param = "DBZH")
+ppiplot_rainy <- plot(ppi_rainy) + ggtitle("Original RBC PPI")
+
+rainfilter <- function(scan) {
+  if (scan$geo$elangle < 90) {
+    dpr <- as.cimg(scan$params[["DPR"]])
+    (dpr <= -12 & !is.na(dpr)) %>%
+      medianblur(4) %>%  # Works adequate for de-speckling
+      threshold(0) %>%  # Set all pixels that have been affected by median blurring to 1, rest to 0
+      split_connected() %>%  # Split image in contiguous areas classified as rain
+      purrr::keep(~ sum(.) > 50) %>%  # Only keep contiguous rain areas if area is > 50 pixels
+      parany() -> contiguous  # Merge to 1 image again
+    if (!is.null(contiguous)) {  # Only buffer if any rain areas of > 50 pixels are retained
+      contiguous %>%
+        distance_transform(1, 2) %>%  # Calculate Euclidean distance (2nd argument) to pixels classified as 1
+        threshold(5) -> dpr_filter
+      
+      dpr_filter <- -dpr_filter
+      scan$params$DBZH[!as.matrix(dpr_filter)] <- NA 
+    }
+  }
+  return(scan)
+}
+
+pvol$scans <- lapply(pvol$scans, function(x) {
+  x$params[["DBZH"]][is.na(x$params[["DPR"]])] <- NA
+  x <- rainfilter(x)
+  return(x)
+})
+
+ppi_buffered <- integrate_to_ppi(pvol, vp, xlim = c(-180000, 180000), ylim = c(-180000, 180000), res = 500, param = "DBZH")
+ppiplot_buffered <- plot(ppi_buffered) + ggtitle("Buffered rain filtering")
+
+ppiplot_rainy + ppiplot_buffered + plot_layout(guides = "collect")
+
+```
+
+We can see most rain is removed, but speckles remain in areas which mostly should be clear from precipitation.
+
+```{r}
+classify_rain <- function(scan) {
+  if (scan$geo$elangle < 90) {
+    dpr <- as.cimg(scan$params[["DPR"]])
+    (dpr <= -12 & !is.na(dpr)) %>%
+      medianblur(4) %>%  # Works adequate for de-speckling
+      threshold(0) %>%  # Set all pixels that have been affected by median blurring to 1, rest to 0
+      split_connected() %>%  # Split image in contiguous areas classified as rain
+      purrr::keep(~ sum(.) > 100) %>%  # Only keep contiguous rain areas if area is > 50 pixels
+      parany() -> contiguous  # Merge to 1 image again
+    if (!is.null(contiguous)) {  # Only buffer if any rain areas of > 50 pixels are retained
+      contiguous %>%
+        distance_transform(1, 2) %>%  # Calculate Euclidean distance (2nd argument) to pixels classified as 1
+        threshold(5) -> dpr_filter
+      
+      dpr_filter <- as.matrix(-dpr_filter)
+      dpr_filter[dpr_filter == -1] <- NA
+      scan$params$RAIN <- dpr_filter
+      class(scan$params$RAIN) <- c("param", "matrix")
+    }
+  }
+  return(scan)
+}
+
+pvol$scans <- lapply(pvol$scans, function(x) {
+  x$params[["DBZH"]][is.na(x$params[["DPR"]])] <- NA
+  x <- classify_rain(x)
+  return(x)
+})
+
+ranges <- lapply(pvol$scans[1:15], function(x) {
+  data <- do.call(function(y) x$params[[y]], list("RAIN"))
+  class(data) <- "matrix"
+  range <- (1:dim(data)[1]) * x$geo$rscale
+  groundrange <- round(beam_distance(range, x$geo$elangle))
+  list(raster::flip(raster::raster(t(data), ymn = 0, ymx = 360, xmn = 0, xmx = max(range)), direction = "y"),
+       raster::flip(raster::raster(t(data), ymn = 0, ymx = 360, xmn = 0, xmx = max(groundrange)), direction = "y"))
+})
+
+get_largest_extent <- function(rasters) {
+  # https://gis.stackexchange.com/a/287081
+  extents <- sapply(rasters, FUN = function(x) {
+    raster::extent(x)
+  })
+  r <- raster(ext = extents[[1]], nrows = rasters[[1]]@nrows, ncols = rasters[[1]]@ncols)
+  max_extent <- sapply(extents, FUN = function(x) {
+    r <<- raster::extend(r, x)
+  })
+  raster::extent(r)
+}
+
+target_extent <- get_largest_extent(lapply(ranges, function(x) x[[2]]))
+
+groundranges_points <- lapply(ranges, function(x) rasterToPoints(x[[2]], spatial = TRUE))
+
+groundranges_coverage <- mapply(function(x, i) {
+  r <- x[[2]]
+  r[!is.na(r)] <- i
+  rasterToPoints(r, spatial = TRUE)
+}, ranges, get_elevation_angles(pvol)[1:15])
+
+gr <- do.call(rbind, groundranges_points)
+gr_cov <- do.call(rbind, groundranges_coverage)
+g <- rasterize(gr, raster(target_extent, res = c(500, 1)), "layer", fun = "count")
+# g_cov <- rasterize(gr_cov, raster(target_extent, res = c(500, 1)), "layer", fun = "sum")
+g_cov <- rasterize(gr_cov, raster(target_extent, res = c(500, 1)), "layer", fun = mean, na.rm = TRUE)
+g <- g_cov
+
+g_dist <- as.cimg(g_cov)
+
+pvol$scans[1:15] <- mapply(function(scan, rainmask) {
+  cropped <- crop(g, rainmask[[2]])
+  resampled <- resample(cropped, rainmask[[1]])
+  
+  scan$params$RAINSTACK <- t(as.matrix(flip(resampled, "y")))
+  class(scan$params$RAINSTACK) <- c("param", "matrix")
+  attributes(scan$params$RAINSTACK) <- attributes(scan$params$DBZH)
+  attr(scan$params$RAINSTACK, "param") <- "RAINSTACK"
+  return(scan)
+}, pvol$scans[1:15], ranges, SIMPLIFY = FALSE)
+
+pvol$scans <- lapply(pvol$scans, function(x) {
+  x$params[["DBZH"]][!is.na(x$params[["RAINSTACK"]])] <- NA
+  return(x)
+})
+
+ppi_filtered <- integrate_to_ppi(pvol, vp, xlim = c(-180000, 180000), ylim = c(-180000, 180000), res = 500, param = "DBZH")
+ppi_rainmask <- project_as_ppi(get_param(pvol$scans[[1]], "RAINSTACK"), grid_size = 500, range_max = 180000)
+# (plot(ppi_filtered)) + plot(ppi_rainmask) +
+```
+
+```{r}
+(ppiplot_rainy + (plot(ppi_buffered) + ggtitle(" + Buffered rain filtering"))) /
+((plot(ppi_filtered) + ggtitle(" + Rain stack filter")) + (plot(ppi_rainmask) + ggtitle("Rain stack"))) + 
+  plot_layout(guides = "collect") + plot_annotation(title = basename(pvolfile))
+```
+
+
+```{r}
+data_vir <- 
+```
+
+
+```{r}
+bbox <- coord_fixed(xlim = c(-180000, 180000), ylim = c(-180000, 180000))
+
+data <- do.call(function(y) x$data[y], list(param))
+rainy <- raster::as.data.frame(raster(data), xy = T)
+
+ggplot() +
+  geom_raster(data = ppi_rainy$data@data, aes(x = x, y = y, fill = VIR)) + scale_fill_viridis_c() +
+  geom_raster(data = ppi_rainmask$data@data, aes(x = x, y = y, fill = RAINSTACK))
+```
+
+
+
+```{r}
+matrix(rep((1:dim(data)[1]) * pvol$scans[[1]]$geo$rscale, 360), nrow = dim(data)[2], ncol = dim(data)[1], byrow = TRUE)
+
+groundranges <- lapply(pvol$scans[1:15], function(x) {
+  data <- do.call(function(y) x$params[[y]], list("RAIN"))
+  class(data) <- "matrix"
+  dimraster <- dim(data)
+  range <- (1:dimraster[1]) * x$geo$rscale
+  groundrange <- round(beam_distance(range, x$geo$elangle))
+  raster::flip(raster::raster(t(data), ymn = 0, ymx = 360, xmn = 0, xmx = max(groundrange)), direction = "y")
+})
+
+
+```
+
+
+```{r}
+a <- lapply(pvol$scans, function(x) {
+  if (x$geo$elangle == 90) return(NULL)
+  data <- do.call(function(y) x$params[[y]], list("RAIN"))
+  class(data) <- "matrix"
+  dimraster <- dim(data)
+  data <- 
+})
+rscale <- pvol$scans[[1]]$geo$rscale
+scan <- pvol$scans[[1]]$params$RAIN
+
+range <- (1:838) * rscale
+azimuths <- 1:360
+groundgrid <- meshgrid()
+class(scan) <- "matrix"
+scan
+```
+
+```{r}
+    x <- linspace(-1, 1, 11)
+    y <- linspace(-1, 1, 11)
+    mgrid <- meshgrid(x, y)
+    Z <- mgrid$X^2 + mgrid$Y^2
+    xp <- yp <- linspace(-1, 1, 101)
+
+    method <- "linear"
+    zp <- interp2(x, y, Z, xp, yp, method)
+    plot(xp, zp, type = "l", col = "blue")
+
+    method = "nearest"
+    zp <- interp2(x, y, Z, xp, yp, method)
+    lines(xp, zp, col = "red")
+    grid()
+```
+
+
+
+```{r}
+lapply(pvol$scans[1:15], function(x) {
+  dbzh <- get_param(x, "DBZH")
+  dpr <- get_param(x, "DPR")
+  ppidbzh <- project_as_ppi(dbzh, grid_size = 500, range_max = 150000)
+  ppidpr <- project_as_ppi(dpr, grid_size = 500, range_max = 150000)
+  plot(ppidbzh) + plot(ppidpr)
+})
+```
+
+
+```{r}
+# rasters <- list(ras_01, ras_02, ras_03, ras_04, ras_10, ras_13, ras_19, ras_22)
+getMaxExtent <- function(rasters) {
+  extents <- sapply(rasters, FUN = function(x) {
+    raster::extent(x)
+  })
+  r <- raster(ext = extents[[1]], nrows = rasters[[1]]@nrows, ncols = rasters[[1]]@ncols)
+  max_extent <- sapply(extents, FUN = function(x) {
+    r <<- raster::extend(r, x)
+  })
+  raster::extent(r)
+}
+
+target_raster <- getMaxExtent(groundranges)
+```
+
+```{r}
+gr <- merge(groundranges[[1]], groundranges[[2]])
+```
+
+
+## Solution
+
+There's clearly a lot of rain in this scan. Now, we can filter this using the depolarization ratio, but that requires some additional steps:
+
+1. For some reasons not all radar rangegates have the full combination of `DBZH`, `DBZV` and `RHOHV` contained within, which means that for these pixels either the `ZDR` cannot be calculated, or `RHOHV` is not available for the calculation of the `DPR`.
+1. The edges of rain clouds are not necessarily well identified by the `DPR` (or `RHOHV` for that matter), so we need to apply some buffering/smoothing to improve this.
+
+### Filter pixels without dual-pol measurements
+
+First, let's make a plot of what pixels we lose if we filter for pixels where we can calculate the `DPR` for, which means both `DBZV` and `RHOHV` must have been available.
+
+```{r plot_dual_pol_pixels, warning=FALSE, out.width='100%'}
+pvol_original <- pvol  # Let's keep the original pvol for comparison
+
+pvol <- calculate_param(pvol, 
+                        ZDRL = 10 ** ((DBZH - DBZV) /10),
+                        DPR = 10 * log10((ZDRL + 1 - 2 * ZDRL^0.5 * RHOHV) / (ZDRL + 1 + 2 * ZDRL^ 0.5 * RHOHV)),
+                        DBZHO = DBZH)
+
+pvol$scans <- lapply(pvol$scans, function(x) {
+  x$params[["DBZH"]][is.na(x$params[["DPR"]])] <- NA
+  x$params[["RHOHV"]][is.na(x$params[["DBZH"]])] <- NA
+  return(x)
+})
+
+ppiplot_rainy <- plot(ppi_rainy) + ggtitle("Original RBC PPI")
+ppi_dualpol <- integrate_to_ppi(pvol, vp, xlim = c(-180000, 180000), ylim = c(-180000, 180000), res = 500, param = "DBZH")
+ppiplot_dualpol <- plot(ppi_dualpol) + ggtitle("Dual-pol available RBC PPI")
+
+ppiplot_rainy + ppiplot_dualpol + plot_layout(guides = "collect")
+```
+
+We can also plot the difference, for which we make a difference of 0 transparent to better see where the PPI pixels are changed most dramatically, and we plot the differences in a histogram.
+
+```{r quantify_dualpol_pixel_difference, warning=FALSE, message=FALSE, out.width='100%'}
+ppi_difference <- ppi_dualpol
+ppi_difference$data$VIR <- ppi_rainy$data$VIR - ppi_dualpol$data$VIR
+ppi_difference$data$VIR[ppi_difference$data$VIR == 0] <- NA
+
+ppiplot_difference <- plot(ppi_difference) + 
+  scale_fill_viridis_c(trans = "log10") +
+  labs(fill = "VIR diff") +
+  # guides(fill = guide_legend(title = "VIR diff")) +
+  ggtitle("Original pixels - pixels with DPR")
+
+as.data.frame(ppi_difference$data) %>%
+  drop_na() %>%
+  filter(VIR < 1e5) %>%
+  ggplot() +
+  geom_histogram(aes(x = VIR)) + 
+  scale_x_continuous(trans = "log10") +
+  labs(x = "VIR diff") -> plot_difference
+
+ppiplot_difference + plot_difference
+```
+
+The PPI and histogram suggest most VIR differences occur in regions with already high reflectivities, which in this particular PPI must have been mostly rain. So filtering these pixels doesn't hurt much. Presumably this applies across the board, but that'll require some further investigation. Nevertheless, for now we assume filtering pixels for the presence of `DBZH` seems reasonable.
+
+### Image processing
+
+We start by illustrating the approach to a single scan. We use the `DPR` as the main masking methodology, though it's possible to extend this technique to include `RHOHV`, as a combined approach may perform better. We plot a $(r,a)$ plot where white pixels are classified as rain (`dpr < -12`), and black pixels are not.
+
+```{r plot_mask, out.width='100%'}
+scan.dpr <- as.cimg(pvol$scans[[1]]$params[["DPR"]])
+
+(scan.dpr <= -12 & !is.na(scan.dpr)) %>%
+  plot()
+```
+
+This shows a lot of pixels, especially close to the radar (lower x-values), get flagged as rain because of the `DPR` value. This is why Kilambi et al. recommend despeckling. Let's use a median-filter to apply this despeckling.
+
+```{r medianblur, out.width='100%'}
+(scan.dpr <= -12 & !is.na(scan.dpr)) %>%
+  medianblur(4) %>%
+  threshold(0) ->
+  despeckled
+
+despeckled %>% plot()
+```
+
+That already looks better, but now we have 'blurred' out some of the regions to larger pixels. If we assume that true rain occurs mostly in larger areas, we can compute the contiguous areas which are flagged as precipitation, calculate the surface (number of pixels within) and filter based on a minimum number of pixels. In this case, we classify rain only as rain if it covers at least 50 pixels/rangegates.
+
+```{r despeckle, out.width='100%'}
+despeckled %>%
+  split_connected() %>%
+  purrr::keep(~ sum(.) > 50) %>%
+  parany() -> areafilter
+
+areafilter %>% plot()
+```
+
+Now, there's a chance we miss some pixels left and right, so if we conservatively filter out rain, we could buffer these areas a bit. So, we'll calculate the euclidean distance from non-rain to rain pixels and if that distance is < 5 units, we'll flag these pixels as rain as well.
+
+```{r buffer, out.width='100%'}
+areafilter %>%
+  distance_transform(1, metric = 2) %>%
+  threshold(5) -> buffered
+
+(-buffered) %>%
+  plot()
+```
+
+We can now check what it looks like if we apply this masking approach to the scans and polar volumes. First we plot the single scan we've cleaned so far.
+
+```{r plot_scan_filters, fig.height=10}
+pvol_buffer <- pvol
+pvol_thresh <- pvol
+
+pvol_buffer$scans[[1]]$params$DBZH[!as.matrix(buffered)] <- NA
+pvol_thresh$scans[[1]]$params$DBZH[pvol_thresh$scans[[1]]$params$DPR < -12 | pvol_thresh$scans[[1]]$params$RHOHV >= 0.95] <- NA
+
+(plot(pvol_original$scans[[1]], xlim = c(0, 180000)) + ggtitle("Original PVOL")) /
+  (plot(pvol_thresh$scans[[1]], xlim = c(0, 180000)) + ggtitle("Simple threshold filter")) /
+  (plot(pvol_buffer$scans[[1]], xlim = c(0, 180000)) + ggtitle("Buffered threshold filter"))
+```
+
+Except for the continuing presence of some interference pattern, and possibly filtering out some areas with ground clutter or wind parks, we see a much cleaner rain filtering than before in the buffered threshold filter.
+
+Now let's apply it to the full `pvol`.
+
+```{r apply_rainfilter_to_full_scan}
+rainfilter <- function(scan) {
+  if (scan$geo$elangle < 90) {
+    dpr <- as.cimg(scan$params[["DPR"]])
+    (dpr <= -12 & !is.na(dpr)) %>%
+      medianblur(4) %>%  # Works adequate for de-speckling
+      threshold(0) %>%  # Set all pixels that have been affected by median blurring to 1, rest to 0
+      split_connected() %>%  # Split image in contiguous areas classified as rain
+      purrr::keep(~ sum(.) > 50) %>%  # Only keep contiguous rain areas if area is > 50 pixels
+      parany() -> contiguous  # Merge to 1 image again
+    if (!is.null(contiguous)) {  # Only buffer if any rain areas of > 50 pixels are retained
+      contiguous %>%
+        distance_transform(1, 2) %>%  # Calculate Euclidean distance (2nd argument) to pixels classified as 1
+        threshold(5) -> dpr_filter
+      
+      dpr_filter <- -dpr_filter
+      scan$params$DBZH[!as.matrix(dpr_filter)] <- NA 
+    }
+  }
+  return(scan)
+}
+
+pvol$scans <- lapply(pvol$scans, function(x) {
+  x$params[["DBZH"]][is.na(x$params[["DPR"]])] <- NA
+  x <- rainfilter(x)
+  return(x)
+})
+```
+
+And once again, calculate RBC and plot the resulting PPI.
+
+```{r plot_final_cleaning, warning=FALSE}
+ppi_buffered <- integrate_to_ppi(pvol, vp, xlim = c(-180000, 180000), ylim = c(-180000, 180000), res = 500, param = "DBZH")
+ppiplot_buffered <- plot(ppi_buffered) + ggtitle("Buffered rain filtering")
+
+(ppiplot_rainy + ggtitle("Original RBC PPI")) + ppiplot_buffered + plot_layout(guides = "collect")
+```
+
+At first sight the RBC PPI may look quite messy after filtering, but overall this approach seems to work quite well:
+
+1. Most of the edges of rain clouds are removed quite well, with the exception of those at > 80km from the radar, but this is probably mostly due to dual-pol measurements not working well anymore at these distances anyways.
+1. We can still apply post-processing to the RBC PPIs, for example by filtering out pixels which have too high values of `VIR` for them to be birds. Or to simply despeckle, or calculate a median value across the whole image.
+1. We have now applied a single buffering procedure to all the scans at all elevations, but this could possibly be tweaked further for each elevation. At higher elevations, we can probably filter quite agressively, and especially if we also include altitude above the ground in our filtering approach.
+1. Many of the speckles that are visible are not necessarily rain, but were already present in the original RBC PPI, so this approach definitely did not worsen this issue much.
