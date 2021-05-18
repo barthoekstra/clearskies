@@ -1,0 +1,308 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+<title>4 Rain visualisation | Clear Skies</title>
+<meta name="author" content="Bart Hoekstra">
+<!-- JS --><script src="https://cdnjs.cloudflare.com/ajax/libs/clipboard.js/2.0.6/clipboard.min.js" integrity="sha256-inc5kl9MA1hkeYUt+EC3BhlIgyp/2jDIyBLS6k3UxPI=" crossorigin="anonymous"></script><script src="https://cdn.jsdelivr.net/npm/fuse.js@6.4.2"></script><script src="https://kit.fontawesome.com/6ecbd6c532.js" crossorigin="anonymous"></script><script src="libs/jquery-3.5.1/jquery-3.5.1.min.js"></script><meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+<link href="libs/bootstrap-4.5.3/bootstrap.min.css" rel="stylesheet">
+<script src="libs/bootstrap-4.5.3/bootstrap.bundle.min.js"></script><script src="libs/bs3compat-0.2.4.9000/tabs.js"></script><script src="libs/bs3compat-0.2.4.9000/bs3compat.js"></script><link href="libs/bs4_book-1.0.0/bs4_book.css" rel="stylesheet">
+<script src="libs/bs4_book-1.0.0/bs4_book.js"></script><script src="libs/accessible-code-block-0.0.1/empty-anchor.js"></script><script src="https://cdn.jsdelivr.net/autocomplete.js/0/autocomplete.jquery.min.js"></script><script src="https://cdn.jsdelivr.net/npm/mark.js@8.11.1/dist/mark.min.js"></script><!-- CSS -->
+</head>
+<body data-spy="scroll" data-target="#toc">
+
+<div class="container-fluid">
+<div class="row">
+  <header class="col-sm-12 col-lg-3 sidebar sidebar-book"><a class="sr-only sr-only-focusable" href="#content">Skip to main content</a>
+
+    <div class="d-flex align-items-start justify-content-between">
+      <h1>
+        <a href="index.html" title="Filtering of Dutch weather radar data">Clear Skies</a>:
+        <small class="text-muted">Filtering of Dutch weather radar data</small>
+      </h1>
+      <button class="btn btn-outline-primary d-lg-none ml-2 mt-1" type="button" data-toggle="collapse" data-target="#main-nav" aria-expanded="true" aria-controls="main-nav"><i class="fas fa-bars"></i><span class="sr-only">Show table of contents</span></button>
+    </div>
+
+    <div id="main-nav" class="collapse-lg">
+      <form role="search">
+        <input id="search" class="form-control" type="search" placeholder="Search" aria-label="Search">
+</form>
+
+      <nav aria-label="Table of contents"><h2>Table of contents</h2>
+        <ul class="book-toc list-unstyled">
+<li><a class="" href="index.html">Home</a></li>
+<li><a class="" href="banding.html"><span class="header-section-number">1</span> Banding</a></li>
+<li><a class="" href="simple-rain-segmentation.html"><span class="header-section-number">2</span> Simple rain segmentation</a></li>
+<li><a class="" href="rain-stacking.html"><span class="header-section-number">3</span> Rain stacking</a></li>
+<li><a class="active" href="rain-visualisation.html"><span class="header-section-number">4</span> Rain visualisation</a></li>
+<li><a class="" href="em-interference.html"><span class="header-section-number">5</span> EM Interference</a></li>
+</ul>
+
+        <div class="book-extra">
+          <p><a id="book-repo" href="https://github.com/barthoekstra/clearskies">View book source <i class="fab fa-github"></i></a></p>
+        </div>
+      </nav>
+</div>
+  </header><main class="col-sm-12 col-md-9 col-lg-7" id="content"><div id="rain-visualisation" class="section level1">
+<h1>
+<span class="header-section-number">4</span> Rain visualisation<a class="anchor" aria-label="anchor" href="#rain-visualisation"><i class="fas fa-link"></i></a>
+</h1>
+<p>The previous approaches to segmentation have perhaps, unintentionally, resulted in a methodology to thoroughly clean RBC PPIs from rain, but this is not necessarily useful for visualisation. Now, instead, we’ll try an approach that simply focuses on visually distinguishing rain from other sources of reflectivity in the RBC PPIs.</p>
+<p>Let’s plot a RBC PPI.</p>
+<div class="sourceCode" id="cb22"><pre class="downlit sourceCode r">
+<code class="sourceCode R"><span class="va">pvolfile</span> <span class="op">&lt;-</span> <span class="st">"data/20201002/NLHRW_pvol_20201002T1205_6356.h5"</span>
+<span class="co"># pvolfile &lt;- "data/20201001/NLHRW_pvol_20201001T2040_6356.h5"</span>
+<span class="va">pvolfile</span> <span class="op">&lt;-</span> <span class="st">"data/20201001/NLHRW_pvol_20201001T1740_6356.h5"</span>
+
+<span class="va">pvol</span> <span class="op">&lt;-</span> <span class="fu">read_pvolfile</span><span class="op">(</span>file <span class="op">=</span> <span class="va">pvolfile</span>, param <span class="op">=</span> <span class="st">"all"</span><span class="op">)</span>
+<span class="va">pvol</span> <span class="op">&lt;-</span> <span class="fu">calculate_param</span><span class="op">(</span><span class="va">pvol</span>, 
+                        ZDRL <span class="op">=</span> <span class="fl">10</span> <span class="op">**</span> <span class="op">(</span><span class="op">(</span><span class="va">DBZH</span> <span class="op">-</span> <span class="va">DBZV</span><span class="op">)</span> <span class="op">/</span><span class="fl">10</span><span class="op">)</span>,
+                        DPR <span class="op">=</span> <span class="fl">10</span> <span class="op">*</span> <span class="fu"><a href="https://rdrr.io/r/base/Log.html">log10</a></span><span class="op">(</span><span class="op">(</span><span class="va">ZDRL</span> <span class="op">+</span> <span class="fl">1</span> <span class="op">-</span> <span class="fl">2</span> <span class="op">*</span> <span class="va">ZDRL</span><span class="op">^</span><span class="fl">0.5</span> <span class="op">*</span> <span class="va">RHOHV</span><span class="op">)</span> <span class="op">/</span> <span class="op">(</span><span class="va">ZDRL</span> <span class="op">+</span> <span class="fl">1</span> <span class="op">+</span> <span class="fl">2</span> <span class="op">*</span> <span class="va">ZDRL</span><span class="op">^</span> <span class="fl">0.5</span> <span class="op">*</span> <span class="va">RHOHV</span><span class="op">)</span><span class="op">)</span><span class="op">)</span>
+<span class="va">vp</span> <span class="op">&lt;-</span> <span class="fu">calculate_vp</span><span class="op">(</span><span class="va">pvolfile</span>, verbose <span class="op">=</span> <span class="cn">FALSE</span><span class="op">)</span>
+<span class="va">ppi_rainy</span> <span class="op">&lt;-</span> <span class="fu">integrate_to_ppi</span><span class="op">(</span><span class="va">pvol</span>, <span class="va">vp</span>, xlim <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/c.html">c</a></span><span class="op">(</span><span class="op">-</span><span class="fl">180000</span>, <span class="fl">180000</span><span class="op">)</span>, ylim <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/c.html">c</a></span><span class="op">(</span><span class="op">-</span><span class="fl">180000</span>, <span class="fl">180000</span><span class="op">)</span>, res <span class="op">=</span> <span class="fl">500</span>, param <span class="op">=</span> <span class="st">"DBZH"</span><span class="op">)</span>
+<span class="fu"><a href="https://rdrr.io/r/graphics/plot.html">plot</a></span><span class="op">(</span><span class="va">ppi_rainy</span><span class="op">)</span></code></pre></div>
+<p><img src="visualisation_files/figure-html/unnamed-chunk-1-1.png" width="672">
+And <code>DBZH</code> and <code>DPR</code> across 5 scans.</p>
+<div class="sourceCode" id="cb23"><pre class="downlit sourceCode r">
+<code class="sourceCode R"><span class="va">pvol</span><span class="op">$</span><span class="va">scans</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/lapply.html">lapply</a></span><span class="op">(</span><span class="va">pvol</span><span class="op">$</span><span class="va">scans</span>, <span class="kw">function</span><span class="op">(</span><span class="va">x</span><span class="op">)</span> <span class="op">{</span>
+  <span class="va">x</span><span class="op">$</span><span class="va">params</span><span class="op">[[</span><span class="st">"DBZH"</span><span class="op">]</span><span class="op">]</span><span class="op">[</span><span class="fu"><a href="https://rdrr.io/r/base/NA.html">is.na</a></span><span class="op">(</span><span class="va">x</span><span class="op">$</span><span class="va">params</span><span class="op">[[</span><span class="st">"DPR"</span><span class="op">]</span><span class="op">]</span><span class="op">)</span><span class="op">]</span> <span class="op">&lt;-</span> <span class="cn">NA</span>
+  <span class="kw"><a href="https://rdrr.io/r/base/function.html">return</a></span><span class="op">(</span><span class="va">x</span><span class="op">)</span>
+<span class="op">}</span><span class="op">)</span>
+<span class="fu"><a href="https://rdrr.io/r/base/lapply.html">lapply</a></span><span class="op">(</span><span class="va">pvol</span><span class="op">$</span><span class="va">scans</span><span class="op">[</span><span class="fl">1</span><span class="op">:</span><span class="fl">5</span><span class="op">]</span>, <span class="kw">function</span><span class="op">(</span><span class="va">x</span><span class="op">)</span> <span class="op">{</span>
+  <span class="va">dbzh</span> <span class="op">&lt;-</span> <span class="fu">get_param</span><span class="op">(</span><span class="va">x</span>, <span class="st">"DBZH"</span><span class="op">)</span>
+  <span class="va">dpr</span> <span class="op">&lt;-</span> <span class="fu">get_param</span><span class="op">(</span><span class="va">x</span>, <span class="st">"DPR"</span><span class="op">)</span>
+  <span class="va">vradh</span> <span class="op">&lt;-</span> <span class="fu">get_param</span><span class="op">(</span><span class="va">x</span>, <span class="st">"VRADH"</span><span class="op">)</span>
+  <span class="va">ppidbzh</span> <span class="op">&lt;-</span> <span class="fu">project_as_ppi</span><span class="op">(</span><span class="va">dbzh</span>, grid_size <span class="op">=</span> <span class="fl">500</span>, range_max <span class="op">=</span> <span class="fl">150000</span><span class="op">)</span>
+  <span class="va">ppidpr</span> <span class="op">&lt;-</span> <span class="fu">project_as_ppi</span><span class="op">(</span><span class="va">dpr</span>, grid_size <span class="op">=</span> <span class="fl">500</span>, range_max <span class="op">=</span> <span class="fl">150000</span><span class="op">)</span>
+  <span class="co"># ppivradh &lt;- project_as_ppi(vradh, grid_size = 500, range_max = 150000)</span>
+  <span class="fu"><a href="https://rdrr.io/r/graphics/plot.html">plot</a></span><span class="op">(</span><span class="va">ppidbzh</span><span class="op">)</span> <span class="op">+</span> <span class="fu"><a href="https://rdrr.io/r/graphics/plot.html">plot</a></span><span class="op">(</span><span class="va">ppidpr</span><span class="op">)</span> <span class="co"># + plot(ppivradh)</span>
+<span class="op">}</span><span class="op">)</span></code></pre></div>
+<p><img src="visualisation_files/figure-html/unnamed-chunk-2-1.png" width="672"><img src="visualisation_files/figure-html/unnamed-chunk-2-2.png" width="672"><img src="visualisation_files/figure-html/unnamed-chunk-2-3.png" width="672"><img src="visualisation_files/figure-html/unnamed-chunk-2-4.png" width="672"><img src="visualisation_files/figure-html/unnamed-chunk-2-5.png" width="672"></p>
+<pre><code>## [[1]]
+## 
+## [[2]]
+## 
+## [[3]]
+## 
+## [[4]]
+## 
+## [[5]]</code></pre>
+<p>Now we can use <code>DPR</code> to visualize where rain is.</p>
+<div class="sourceCode" id="cb25"><pre class="downlit sourceCode r">
+<code class="sourceCode R"><span class="va">masks</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/lapply.html">lapply</a></span><span class="op">(</span><span class="va">pvol</span><span class="op">$</span><span class="va">scans</span><span class="op">[</span><span class="fl">1</span><span class="op">:</span><span class="fl">15</span><span class="op">]</span>, <span class="kw">function</span><span class="op">(</span><span class="va">x</span><span class="op">)</span> <span class="op">{</span>
+  <span class="va">ppi</span> <span class="op">&lt;-</span> <span class="fu">project_as_ppi</span><span class="op">(</span><span class="fu">get_param</span><span class="op">(</span><span class="va">x</span>, <span class="st">"DPR"</span><span class="op">)</span>, grid_size <span class="op">=</span> <span class="fl">500</span>, range_max <span class="op">=</span> <span class="fl">180000</span><span class="op">)</span>
+  
+  <span class="kw">if</span> <span class="op">(</span><span class="va">ppi</span><span class="op">$</span><span class="va">geo</span><span class="op">$</span><span class="va">elangle</span> <span class="op">&lt;</span> <span class="fl">90</span><span class="op">)</span> <span class="op">{</span>
+    <span class="va">dpr</span> <span class="op">&lt;-</span> <span class="fu">as.cimg</span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/matrix.html">as.matrix</a></span><span class="op">(</span><span class="va">ppi</span><span class="op">$</span><span class="va">data</span><span class="op">)</span><span class="op">)</span>
+    <span class="op">(</span><span class="va">dpr</span> <span class="op">&lt;=</span> <span class="op">-</span><span class="fl">12</span> <span class="op">&amp;</span> <span class="op">!</span><span class="fu"><a href="https://rdrr.io/r/base/NA.html">is.na</a></span><span class="op">(</span><span class="va">dpr</span><span class="op">)</span><span class="op">)</span> <span class="op">%&gt;%</span>
+      <span class="fu">clean</span><span class="op">(</span><span class="fl">4</span><span class="op">)</span> <span class="op">%&gt;%</span>  <span class="co"># Remove speckles by shrinking then growing using a 4px radius</span>
+      <span class="fu">fill</span><span class="op">(</span><span class="fl">10</span><span class="op">)</span> <span class="op">-&gt;</span> <span class="va">filled</span>
+    
+    <span class="kw">if</span> <span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/sum.html">sum</a></span><span class="op">(</span><span class="va">filled</span><span class="op">)</span> <span class="op">&gt;</span> <span class="fl">0</span><span class="op">)</span> <span class="op">{</span>
+      <span class="va">filled</span> <span class="op">%&gt;%</span>
+        <span class="fu">split_connected</span><span class="op">(</span><span class="op">)</span> <span class="op">%&gt;%</span>  <span class="co"># Split image in contiguous areas classified as rain</span>
+        <span class="fu">purrr</span><span class="fu">::</span><span class="fu"><a href="https://purrr.tidyverse.org/reference/keep.html">keep</a></span><span class="op">(</span><span class="op">~</span> <span class="fu"><a href="https://rdrr.io/r/base/sum.html">sum</a></span><span class="op">(</span><span class="va">.</span><span class="op">)</span> <span class="op">&gt;</span> <span class="fl">100</span><span class="op">)</span> <span class="op">%&gt;%</span>  <span class="co"># Only keep contiguous rain areas if area is &gt; 100 pixels</span>
+        <span class="fu">parany</span><span class="op">(</span><span class="op">)</span> <span class="op">-&gt;</span> <span class="va">contiguous</span>  <span class="co"># Merge to 1 image again</span>
+    <span class="op">}</span>
+    <span class="kw">if</span> <span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/exists.html">exists</a></span><span class="op">(</span><span class="st">"contiguous"</span><span class="op">)</span> <span class="op">&amp;&amp;</span> <span class="op">!</span><span class="fu"><a href="https://rdrr.io/r/base/NULL.html">is.null</a></span><span class="op">(</span><span class="va">contiguous</span><span class="op">)</span><span class="op">)</span> <span class="op">{</span>  <span class="co"># Only buffer if any rain areas of &gt; 50 pixels are retained</span>
+      <span class="va">contiguous</span> <span class="op">%&gt;%</span>
+        <span class="fu">distance_transform</span><span class="op">(</span><span class="fl">1</span>, <span class="fl">2</span><span class="op">)</span> <span class="op">%&gt;%</span>  <span class="co"># Calculate Euclidean distance (2nd argument) to pixels classified as 1</span>
+        <span class="fu">threshold</span><span class="op">(</span><span class="fl">5</span><span class="op">)</span> <span class="op">-&gt;</span> <span class="va">dpr_mask</span>
+      
+      <span class="va">dpr_mask</span> <span class="op">%&gt;%</span>
+        <span class="fu">distance_transform</span><span class="op">(</span><span class="fl">1</span>, <span class="fl">2</span><span class="op">)</span> <span class="op">-&gt;</span> <span class="va">dist_mask</span>
+      
+      <span class="va">dpr_mask</span> <span class="op">&lt;-</span> <span class="op">-</span><span class="va">dpr_mask</span>
+      
+      <span class="va">m</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/matrix.html">as.matrix</a></span><span class="op">(</span><span class="va">dpr_mask</span><span class="op">)</span>
+      <span class="va">m</span><span class="op">[</span><span class="va">m</span> <span class="op">==</span> <span class="fl">0</span><span class="op">]</span> <span class="op">&lt;-</span> <span class="fl">1</span>
+      <span class="va">m</span><span class="op">[</span><span class="va">m</span> <span class="op">==</span> <span class="op">-</span><span class="fl">1</span><span class="op">]</span> <span class="op">&lt;-</span> <span class="cn">NA</span>
+      
+      <span class="va">d</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/matrix.html">as.matrix</a></span><span class="op">(</span><span class="va">dist_mask</span><span class="op">)</span>
+      <span class="va">d</span><span class="op">[</span><span class="va">d</span> <span class="op">==</span> <span class="fl">0</span><span class="op">]</span> <span class="op">&lt;-</span> <span class="cn">NA</span>
+      <span class="kw"><a href="https://rdrr.io/r/base/function.html">return</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/list.html">list</a></span><span class="op">(</span><span class="va">m</span>, <span class="va">d</span><span class="op">)</span><span class="op">)</span>
+    <span class="op">}</span> <span class="kw">else</span> <span class="op">{</span>
+      <span class="va">o</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/matrix.html">matrix</a></span><span class="op">(</span>nrow <span class="op">=</span> <span class="va">ppi</span><span class="op">$</span><span class="va">data</span><span class="op">@</span><span class="va">grid</span><span class="op">@</span><span class="va">cells.dim</span><span class="op">[</span><span class="fl">1</span><span class="op">]</span>, ncol <span class="op">=</span> <span class="va">ppi</span><span class="op">$</span><span class="va">data</span><span class="op">@</span><span class="va">grid</span><span class="op">@</span><span class="va">cells.dim</span><span class="op">[</span><span class="fl">2</span><span class="op">]</span><span class="op">)</span>
+      <span class="kw"><a href="https://rdrr.io/r/base/function.html">return</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/list.html">list</a></span><span class="op">(</span><span class="va">o</span>, <span class="va">o</span><span class="op">)</span><span class="op">)</span>
+    <span class="op">}</span>
+  <span class="op">}</span>
+<span class="op">}</span><span class="op">)</span>
+
+<span class="va">rain_elevations</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/lapply.html">simplify2array</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/lapply.html">lapply</a></span><span class="op">(</span><span class="va">masks</span>, <span class="kw">function</span><span class="op">(</span><span class="va">x</span><span class="op">)</span> <span class="va">x</span><span class="op">[[</span><span class="fl">1</span><span class="op">]</span><span class="op">]</span><span class="op">)</span><span class="op">)</span>
+<span class="va">rain_distances</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/lapply.html">simplify2array</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/lapply.html">lapply</a></span><span class="op">(</span><span class="va">masks</span>, <span class="kw">function</span><span class="op">(</span><span class="va">x</span><span class="op">)</span> <span class="va">x</span><span class="op">[[</span><span class="fl">2</span><span class="op">]</span><span class="op">]</span><span class="op">)</span><span class="op">)</span>
+<span class="va">rain_elevations</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/apply.html">apply</a></span><span class="op">(</span><span class="va">rain_elevations</span>, <span class="fu"><a href="https://rdrr.io/r/base/c.html">c</a></span><span class="op">(</span><span class="fl">1</span>, <span class="fl">2</span><span class="op">)</span>, <span class="va">sum</span>, na.rm <span class="op">=</span> <span class="cn">TRUE</span><span class="op">)</span>
+<span class="va">rain_elevations</span><span class="op">[</span><span class="va">rain_elevations</span> <span class="op">&lt;=</span> <span class="fl">1</span><span class="op">]</span> <span class="op">&lt;-</span> <span class="cn">NA</span>
+<span class="va">rain_distances</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/apply.html">apply</a></span><span class="op">(</span><span class="va">rain_distances</span>, <span class="fu"><a href="https://rdrr.io/r/base/c.html">c</a></span><span class="op">(</span><span class="fl">1</span>, <span class="fl">2</span><span class="op">)</span>, <span class="va">sum</span>, na.rm <span class="op">=</span> <span class="cn">TRUE</span><span class="op">)</span>
+<span class="va">rain_distances</span><span class="op">[</span><span class="va">rain_distances</span> <span class="op">==</span> <span class="fl">0</span><span class="op">]</span> <span class="op">&lt;-</span> <span class="cn">NA</span>
+
+<span class="va">ppi_rainy</span><span class="op">$</span><span class="va">data</span><span class="op">$</span><span class="va">rain_distance</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/vector.html">as.vector</a></span><span class="op">(</span><span class="va">rain_distances</span><span class="op">)</span>
+<span class="va">ppi_rainy</span><span class="op">$</span><span class="va">data</span><span class="op">$</span><span class="va">rain_elevations</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/vector.html">as.vector</a></span><span class="op">(</span><span class="va">rain_elevations</span><span class="op">)</span></code></pre></div>
+<p>And plot the visualization.</p>
+<div class="sourceCode" id="cb26"><pre class="downlit sourceCode r">
+<code class="sourceCode R"><span class="va">data</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/do.call.html">do.call</a></span><span class="op">(</span><span class="kw">function</span><span class="op">(</span><span class="va">y</span><span class="op">)</span> <span class="va">ppi_rainy</span><span class="op">$</span><span class="va">data</span><span class="op">[</span><span class="va">y</span><span class="op">]</span>, <span class="fu"><a href="https://rdrr.io/r/base/list.html">list</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/c.html">c</a></span><span class="op">(</span><span class="st">"VIR"</span>, <span class="st">"rain_elevations"</span><span class="op">)</span><span class="op">)</span><span class="op">)</span>
+<span class="va">data</span> <span class="op">&lt;-</span> <span class="fu">raster</span><span class="fu">::</span><span class="fu"><a href="https://rdrr.io/pkg/raster/man/as.data.frame.html">as.data.frame</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/utils/stack.html">stack</a></span><span class="op">(</span><span class="va">data</span><span class="op">)</span>, xy <span class="op">=</span> <span class="cn">T</span><span class="op">)</span>
+<span class="va">bbox</span> <span class="op">&lt;-</span> <span class="fu">coord_fixed</span><span class="op">(</span>xlim <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/c.html">c</a></span><span class="op">(</span><span class="op">-</span><span class="fl">160000</span>, <span class="fl">160000</span><span class="op">)</span>, ylim <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/c.html">c</a></span><span class="op">(</span><span class="op">-</span><span class="fl">160000</span>, <span class="fl">160000</span><span class="op">)</span><span class="op">)</span>
+<span class="va">zlim</span> <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/c.html">c</a></span><span class="op">(</span><span class="fl">0</span>, <span class="fl">5000</span><span class="op">)</span>
+<span class="va">index</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/which.html">which</a></span><span class="op">(</span><span class="va">data</span><span class="op">[</span>, <span class="fl">3</span><span class="op">]</span> <span class="op">&lt;</span> <span class="va">zlim</span><span class="op">[</span><span class="fl">1</span><span class="op">]</span><span class="op">)</span>
+<span class="kw">if</span> <span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/length.html">length</a></span><span class="op">(</span><span class="va">index</span><span class="op">)</span> <span class="op">&gt;</span> <span class="fl">0</span><span class="op">)</span> <span class="op">{</span>
+  <span class="va">data</span><span class="op">[</span><span class="va">index</span>, <span class="fl">3</span><span class="op">]</span> <span class="op">&lt;-</span> <span class="va">zlim</span><span class="op">[</span><span class="fl">1</span><span class="op">]</span>
+<span class="op">}</span>
+<span class="va">index</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/which.html">which</a></span><span class="op">(</span><span class="va">data</span><span class="op">[</span>, <span class="fl">3</span><span class="op">]</span> <span class="op">&gt;</span> <span class="va">zlim</span><span class="op">[</span><span class="fl">2</span><span class="op">]</span><span class="op">)</span>
+<span class="kw">if</span> <span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/length.html">length</a></span><span class="op">(</span><span class="va">index</span><span class="op">)</span> <span class="op">&gt;</span> <span class="fl">0</span><span class="op">)</span> <span class="op">{</span>
+  <span class="va">data</span><span class="op">[</span><span class="va">index</span>, <span class="fl">3</span><span class="op">]</span> <span class="op">&lt;-</span> <span class="va">zlim</span><span class="op">[</span><span class="fl">2</span><span class="op">]</span>
+<span class="op">}</span>
+
+<span class="fu">ggplot</span><span class="op">(</span>data <span class="op">=</span> <span class="va">data</span><span class="op">)</span> <span class="op">+</span>
+  <span class="fu">geom_raster</span><span class="op">(</span><span class="fu">aes</span><span class="op">(</span>x <span class="op">=</span> <span class="va">x</span>, y <span class="op">=</span> <span class="va">y</span>, fill <span class="op">=</span> <span class="va">VIR</span><span class="op">)</span><span class="op">)</span> <span class="op">+</span>
+  <span class="fu">scale_fill_viridis_c</span><span class="op">(</span>trans <span class="op">=</span> <span class="st">"log10"</span>, na.value <span class="op">=</span> <span class="st">"transparent"</span>, option <span class="op">=</span> <span class="st">"plasma"</span><span class="op">)</span> <span class="op">+</span>
+  <span class="fu">new_scale_fill</span><span class="op">(</span><span class="op">)</span> <span class="op">+</span>
+  <span class="fu">geom_raster</span><span class="op">(</span><span class="fu">aes</span><span class="op">(</span>x <span class="op">=</span> <span class="va">x</span>, y <span class="op">=</span> <span class="va">y</span>, fill <span class="op">=</span> <span class="va">rain_elevations</span>, alpha <span class="op">=</span> <span class="va">rain_elevations</span><span class="op">)</span><span class="op">)</span> <span class="op">+</span>
+  <span class="co"># scale_fill_continuous(na.value = "transparent") +</span>
+  <span class="fu">scale_fill_gradient</span><span class="op">(</span>na.value <span class="op">=</span> <span class="st">"transparent"</span>, low <span class="op">=</span> <span class="st">"white"</span>, high <span class="op">=</span> <span class="st">"#7fb4ff"</span><span class="op">)</span> <span class="op">+</span>
+  <span class="fu">scale_alpha_continuous</span><span class="op">(</span>range <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/c.html">c</a></span><span class="op">(</span><span class="fl">0.9</span>, <span class="fl">1</span><span class="op">)</span><span class="op">)</span> <span class="op">+</span>
+  <span class="fu">theme_bw</span><span class="op">(</span><span class="op">)</span> <span class="op">+</span>
+  <span class="va">bbox</span></code></pre></div>
+<pre><code>## Warning: Transformation introduced infinite values in discrete y-axis</code></pre>
+<div class="inline-figure"><img src="visualisation_files/figure-html/unnamed-chunk-4-1.png" width="100%"></div>
+<div class="sourceCode" id="cb28"><pre class="downlit sourceCode r">
+<code class="sourceCode R"><span class="kw"><a href="https://rdrr.io/r/base/source.html">source</a></span><span class="op">(</span><span class="st">"R/comp_ppi.R"</span><span class="op">)</span>
+<span class="va">hrw_ppis</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/Sys.glob.html">Sys.glob</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/file.path.html">file.path</a></span><span class="op">(</span><span class="st">"data/processed/final-ppis"</span>, <span class="st">"*NL62*"</span><span class="op">)</span><span class="op">)</span>
+<span class="va">dhl_ppis</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/Sys.glob.html">Sys.glob</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/file.path.html">file.path</a></span><span class="op">(</span><span class="st">"data/processed/final-ppis"</span>, <span class="st">"*NL61*"</span><span class="op">)</span><span class="op">)</span>
+
+<span class="va">generate_composites</span> <span class="op">&lt;-</span> <span class="kw">function</span><span class="op">(</span><span class="va">hrw_ppis</span>, <span class="va">dhl_ppis</span>, <span class="va">res</span>, <span class="va">maxrange</span><span class="op">)</span> <span class="op">{</span>
+  <span class="co"># Make a new empty PPI to store all composites in</span>
+  <span class="va">template_ppi</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/readRDS.html">readRDS</a></span><span class="op">(</span><span class="va">hrw_ppis</span><span class="op">[</span><span class="fl">1</span><span class="op">]</span><span class="op">)</span>
+  <span class="va">all</span> <span class="op">&lt;-</span> <span class="va">template_ppi</span><span class="op">$</span><span class="va">data</span><span class="op">@</span><span class="va">data</span> <span class="op">%&gt;%</span>
+    <span class="fu"><a href="https://rdrr.io/r/stats/filter.html">filter</a></span><span class="op">(</span><span class="fu">row_number</span><span class="op">(</span><span class="op">)</span> <span class="op">==</span> <span class="fl">0</span><span class="op">)</span>
+  
+  <span class="va">basemap</span> <span class="op">&lt;-</span> <span class="cn">NULL</span>
+  
+  <span class="kw">for</span> <span class="op">(</span><span class="va">i</span> <span class="kw">in</span> <span class="fu"><a href="https://rdrr.io/r/base/seq.html">seq_along</a></span><span class="op">(</span><span class="va">hrw_ppis</span><span class="op">)</span><span class="op">)</span> <span class="op">{</span>
+    <span class="va">ppi_hrw</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/readRDS.html">readRDS</a></span><span class="op">(</span><span class="va">hrw_ppis</span><span class="op">[</span><span class="va">i</span><span class="op">]</span><span class="op">)</span>
+    <span class="va">ppi_dhl</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/readRDS.html">readRDS</a></span><span class="op">(</span><span class="va">dhl_ppis</span><span class="op">[</span><span class="va">i</span><span class="op">]</span><span class="op">)</span>
+    
+    <span class="co"># Set all columns to NA if further than maxrange from radar</span>
+    <span class="va">ppi_hrw</span><span class="op">$</span><span class="va">data</span><span class="op">@</span><span class="va">data</span><span class="op">[</span><span class="va">ppi_hrw</span><span class="op">$</span><span class="va">data</span><span class="op">@</span><span class="va">data</span><span class="op">$</span><span class="va">dist_radar</span> <span class="op">&gt;</span> <span class="va">maxrange</span>, <span class="op">]</span> <span class="op">&lt;-</span> <span class="cn">NA</span>
+    <span class="va">ppi_dhl</span><span class="op">$</span><span class="va">data</span><span class="op">@</span><span class="va">data</span><span class="op">[</span><span class="va">ppi_dhl</span><span class="op">$</span><span class="va">data</span><span class="op">@</span><span class="va">data</span><span class="op">$</span><span class="va">dist_radar</span> <span class="op">&gt;</span> <span class="va">maxrange</span>, <span class="op">]</span> <span class="op">&lt;-</span> <span class="cn">NA</span>
+    
+    <span class="va">params</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/c.html">c</a></span><span class="op">(</span><span class="st">"VIR"</span>, <span class="st">"VID"</span>, <span class="st">"R"</span>, <span class="st">"overlap"</span>, <span class="st">"eta_sum"</span>, <span class="st">"eta_sum_expected"</span>, <span class="st">"dist_radar"</span>, <span class="st">"class"</span>,
+                <span class="st">"urban"</span>, <span class="st">"agricultural"</span>, <span class="st">"semiopen"</span>, <span class="st">"forests"</span>, <span class="st">"wetlands"</span>, <span class="st">"waterbodies"</span>, <span class="st">"dist_urban"</span>, <span class="st">"human_pop"</span>,
+                <span class="st">"wb_area_id"</span>, <span class="st">"wb_area_nr"</span>, <span class="st">"ptt_route"</span>, <span class="st">"wb_area_ha"</span>, <span class="st">"wb_total_biomass"</span>, <span class="st">"ptt_total_biomass"</span>, <span class="st">"total_biomass"</span>, 
+                <span class="st">"wb_weighted_mean_weight"</span>, <span class="st">"ptt_weighted_mean_weight"</span>, <span class="st">"weighted_mean_weight"</span><span class="op">)</span>
+    <span class="co"># All mean methods except for factors and urban area (set to max), because we want to strictly filter out fireworks</span>
+    <span class="va">methods</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/c.html">c</a></span><span class="op">(</span><span class="st">"mean"</span>, <span class="st">"mean"</span>, <span class="st">"mean"</span>, <span class="st">"mean"</span>, <span class="st">"mean"</span>, <span class="st">"mean"</span>, <span class="st">"min"</span>, <span class="st">"min"</span>,
+                 <span class="st">"max"</span>, <span class="st">"mean"</span>, <span class="st">"mean"</span>, <span class="st">"mean"</span>, <span class="st">"mean"</span>, <span class="st">"mean"</span>, <span class="st">"mean"</span>, <span class="st">"mean"</span>, 
+                 <span class="st">"factor"</span>, <span class="st">"factor"</span>, <span class="st">"factor"</span>, <span class="st">"factor"</span>, <span class="st">"mean"</span>, <span class="st">"mean"</span>, <span class="st">"mean"</span>,
+                 <span class="st">"mean"</span>, <span class="st">"mean"</span>, <span class="st">"mean"</span><span class="op">)</span>
+    <span class="va">cppi</span> <span class="op">&lt;-</span> <span class="fu">comp_ppi</span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/list.html">list</a></span><span class="op">(</span><span class="va">ppi_hrw</span>, <span class="va">ppi_dhl</span><span class="op">)</span>, param <span class="op">=</span> <span class="va">params</span>, method <span class="op">=</span> <span class="va">methods</span>, res <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/c.html">c</a></span><span class="op">(</span><span class="va">res</span>, <span class="va">res</span><span class="op">)</span>, coverage <span class="op">=</span> <span class="st">"count"</span><span class="op">)</span>
+    
+    <span class="co"># Set rain and background pixels to NA</span>
+    <span class="va">cppi</span><span class="op">$</span><span class="va">data</span><span class="op">$</span><span class="va">VIR</span><span class="op">[</span><span class="va">cppi</span><span class="op">$</span><span class="va">data</span><span class="op">$</span><span class="va">class</span> <span class="op">&lt;</span> <span class="fl">2</span><span class="op">]</span> <span class="op">&lt;-</span> <span class="cn">NA</span>
+    
+    <span class="co"># Add coordinates</span>
+    <span class="va">coords_cppi</span> <span class="op">&lt;-</span> <span class="fu">raster</span><span class="fu">::</span><span class="fu"><a href="https://rdrr.io/pkg/raster/man/xyFromCell.html">coordinates</a></span><span class="op">(</span><span class="va">cppi</span><span class="op">$</span><span class="va">data</span><span class="op">)</span>
+    <span class="va">cppi</span><span class="op">$</span><span class="va">data</span><span class="op">$</span><span class="va">x</span> <span class="op">&lt;-</span> <span class="va">coords_cppi</span><span class="op">[</span>, <span class="fl">1</span><span class="op">]</span>
+    <span class="va">cppi</span><span class="op">$</span><span class="va">data</span><span class="op">$</span><span class="va">y</span> <span class="op">&lt;-</span> <span class="va">coords_cppi</span><span class="op">[</span>, <span class="fl">2</span><span class="op">]</span>
+    
+    <span class="co"># Add pixel ID</span>
+    <span class="va">cppi</span><span class="op">$</span><span class="va">data</span><span class="op">@</span><span class="va">data</span> <span class="op">%&gt;%</span>
+      <span class="fu">mutate</span><span class="op">(</span>pixel <span class="op">=</span> <span class="fu">row_number</span><span class="op">(</span><span class="op">)</span><span class="op">)</span> <span class="op">-&gt;</span> <span class="va">cppi</span><span class="op">$</span><span class="va">data</span><span class="op">@</span><span class="va">data</span>
+    
+    <span class="co"># Solve different factors</span>
+    <span class="va">solve_factors</span> <span class="op">&lt;-</span> <span class="kw">function</span><span class="op">(</span><span class="va">x</span><span class="op">)</span> <span class="op">{</span>
+      <span class="va">r</span> <span class="op">&lt;-</span> <span class="va">x</span><span class="op">[</span><span class="fl">1</span><span class="op">]</span>
+      <span class="kw">if</span> <span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/NA.html">is.na</a></span><span class="op">(</span><span class="va">x</span><span class="op">[</span><span class="fl">1</span><span class="op">]</span><span class="op">)</span> <span class="op">&amp;&amp;</span> <span class="fu"><a href="https://rdrr.io/r/base/NA.html">is.na</a></span><span class="op">(</span><span class="va">x</span><span class="op">[</span><span class="fl">2</span><span class="op">]</span><span class="op">)</span><span class="op">)</span> <span class="op">{</span> <span class="va">r</span> <span class="op">&lt;-</span> <span class="cn">NA</span> <span class="op">}</span>
+      <span class="kw">if</span> <span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/NA.html">is.na</a></span><span class="op">(</span><span class="va">x</span><span class="op">[</span><span class="fl">1</span><span class="op">]</span><span class="op">)</span> <span class="op">&amp;&amp;</span> <span class="op">!</span><span class="fu"><a href="https://rdrr.io/r/base/NA.html">is.na</a></span><span class="op">(</span><span class="va">x</span><span class="op">[</span><span class="fl">2</span><span class="op">]</span><span class="op">)</span><span class="op">)</span> <span class="op">{</span> <span class="va">r</span> <span class="op">&lt;-</span> <span class="va">x</span><span class="op">[</span><span class="fl">2</span><span class="op">]</span> <span class="op">}</span>
+      <span class="kw">if</span> <span class="op">(</span><span class="op">!</span><span class="fu"><a href="https://rdrr.io/r/base/NA.html">is.na</a></span><span class="op">(</span><span class="va">x</span><span class="op">[</span><span class="fl">1</span><span class="op">]</span><span class="op">)</span> <span class="op">&amp;&amp;</span> <span class="fu"><a href="https://rdrr.io/r/base/NA.html">is.na</a></span><span class="op">(</span><span class="va">x</span><span class="op">[</span><span class="fl">2</span><span class="op">]</span><span class="op">)</span><span class="op">)</span> <span class="op">{</span> <span class="va">r</span> <span class="op">&lt;-</span> <span class="va">x</span><span class="op">[</span><span class="fl">1</span><span class="op">]</span> <span class="op">}</span>
+      <span class="kw">if</span> <span class="op">(</span><span class="op">!</span><span class="fu"><a href="https://rdrr.io/r/base/NA.html">is.na</a></span><span class="op">(</span><span class="va">x</span><span class="op">[</span><span class="fl">1</span><span class="op">]</span><span class="op">)</span> <span class="op">&amp;&amp;</span> <span class="op">!</span><span class="fu"><a href="https://rdrr.io/r/base/NA.html">is.na</a></span><span class="op">(</span><span class="va">x</span><span class="op">[</span><span class="fl">2</span><span class="op">]</span><span class="op">)</span><span class="op">)</span> <span class="op">{</span>
+        <span class="kw">if</span> <span class="op">(</span><span class="va">x</span><span class="op">[</span><span class="fl">1</span><span class="op">]</span> <span class="op">!=</span> <span class="va">x</span><span class="op">[</span><span class="fl">2</span><span class="op">]</span><span class="op">)</span> <span class="op">{</span>
+          <span class="va">r</span> <span class="op">&lt;-</span> <span class="cn">NA</span>
+        <span class="op">}</span> <span class="kw">else</span> <span class="op">{</span>
+          <span class="va">r</span> <span class="op">&lt;-</span> <span class="va">x</span><span class="op">[</span><span class="fl">1</span><span class="op">]</span>
+        <span class="op">}</span>
+      <span class="op">}</span>
+      <span class="va">r</span>
+    <span class="op">}</span>
+    
+    <span class="kw">for</span> <span class="op">(</span><span class="va">j</span> <span class="kw">in</span> <span class="fu"><a href="https://rdrr.io/r/base/which.html">which</a></span><span class="op">(</span><span class="va">methods</span> <span class="op">==</span> <span class="st">"factor"</span><span class="op">)</span><span class="op">)</span> <span class="op">{</span>
+      <span class="va">cppi</span><span class="op">$</span><span class="va">data</span><span class="op">@</span><span class="va">data</span><span class="op">[</span><span class="va">params</span><span class="op">[</span><span class="va">j</span><span class="op">]</span><span class="op">]</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/apply.html">apply</a></span><span class="op">(</span><span class="va">cppi</span><span class="op">$</span><span class="va">data</span><span class="op">@</span><span class="va">data</span><span class="op">[</span><span class="va">params</span><span class="op">[</span><span class="va">j</span><span class="op">]</span><span class="op">]</span>, <span class="fl">1</span>, <span class="va">solve_factors</span><span class="op">)</span>
+    <span class="op">}</span>
+    
+    <span class="fu"><a href="https://rdrr.io/r/base/readRDS.html">saveRDS</a></span><span class="op">(</span><span class="va">cppi</span>, file <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/paste.html">paste</a></span><span class="op">(</span><span class="st">"data/processed/composite-ppis/"</span>, <span class="va">res</span>, <span class="st">"m/"</span>, <span class="fu"><a href="https://rdrr.io/r/base/strptime.html">strftime</a></span><span class="op">(</span><span class="va">ppi_hrw</span><span class="op">$</span><span class="va">datetime</span>, format <span class="op">=</span> <span class="st">"%Y%m%d%H%M"</span><span class="op">)</span>, <span class="st">".RDS"</span>, sep <span class="op">=</span> <span class="st">""</span><span class="op">)</span><span class="op">)</span>
+    
+    <span class="va">cppi</span><span class="op">$</span><span class="va">data</span><span class="op">@</span><span class="va">data</span> <span class="op">%&gt;%</span>
+      <span class="fu">mutate</span><span class="op">(</span>datetime <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/as.POSIXlt.html">as.POSIXct</a></span><span class="op">(</span><span class="va">ppi_hrw</span><span class="op">$</span><span class="va">datetime</span><span class="op">)</span><span class="op">)</span> <span class="op">%&gt;%</span>
+      <span class="fu">bind_rows</span><span class="op">(</span><span class="va">all</span><span class="op">)</span> <span class="op">-&gt;</span> <span class="va">all</span>
+    
+    <span class="kw">if</span> <span class="op">(</span><span class="va">i</span> <span class="op">==</span> <span class="fl">1</span><span class="op">)</span> <span class="op">{</span>
+      <span class="va">basemap</span> <span class="op">&lt;-</span> <span class="fu">download_basemap</span><span class="op">(</span><span class="va">cppi</span>, alpha <span class="op">=</span> <span class="fl">0.3</span><span class="op">)</span>
+    <span class="op">}</span>
+    
+    <span class="va">cppi</span><span class="op">$</span><span class="va">data</span><span class="op">$</span><span class="va">VIR</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/Log.html">log10</a></span><span class="op">(</span><span class="va">cppi</span><span class="op">$</span><span class="va">data</span><span class="op">$</span><span class="va">VIR</span><span class="op">)</span>
+    <span class="va">cppi</span><span class="op">$</span><span class="va">data</span><span class="op">$</span><span class="va">VIR</span><span class="op">[</span><span class="fu"><a href="https://rdrr.io/r/base/NA.html">is.na</a></span><span class="op">(</span><span class="va">cppi</span><span class="op">$</span><span class="va">data</span><span class="op">$</span><span class="va">VIR</span><span class="op">)</span><span class="op">]</span> <span class="op">&lt;-</span> <span class="fl">0</span>
+    
+    <span class="fu">bioRad</span><span class="fu">::</span><span class="fu"><a href="https://adokter.github.io/bioRad/reference/map.html">map</a></span><span class="op">(</span><span class="va">cppi</span>, map <span class="op">=</span> <span class="va">basemap</span>, radar_size <span class="op">=</span> <span class="fl">1</span>, xlim <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/c.html">c</a></span><span class="op">(</span><span class="fl">3.1</span>, <span class="fl">6.8</span><span class="op">)</span>, ylim <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/c.html">c</a></span><span class="op">(</span><span class="fl">51</span>, <span class="fl">54</span><span class="op">)</span>, zlim <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/c.html">c</a></span><span class="op">(</span><span class="fl">0</span>, <span class="fl">4.5</span><span class="op">)</span>,
+                palette <span class="op">=</span> <span class="fu">viridis</span><span class="op">(</span><span class="fl">256</span>, option <span class="op">=</span> <span class="st">"viridis"</span>, alpha <span class="op">=</span> <span class="fl">0.6</span><span class="op">)</span><span class="op">)</span> <span class="op">+</span>
+      <span class="fu">labs</span><span class="op">(</span>title <span class="op">=</span> <span class="st">"Fireworks NYE 2017-2018"</span>,
+           subtitle <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/paste.html">paste</a></span><span class="op">(</span><span class="va">ppi_hrw</span><span class="op">$</span><span class="va">datetime</span>, <span class="st">' UTC'</span>, sep <span class="op">=</span> <span class="st">""</span><span class="op">)</span><span class="op">)</span>
+
+    <span class="fu">ggsave</span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/paste.html">paste</a></span><span class="op">(</span><span class="st">"data/plots/vir-ppis/"</span>, <span class="va">res</span>, <span class="st">"m/"</span>, <span class="fu"><a href="https://rdrr.io/r/base/strptime.html">strftime</a></span><span class="op">(</span><span class="va">ppi_hrw</span><span class="op">$</span><span class="va">datetime</span>, format <span class="op">=</span> <span class="st">"%Y%m%d%H%M"</span><span class="op">)</span>, <span class="st">".png"</span>, sep <span class="op">=</span> <span class="st">""</span><span class="op">)</span><span class="op">)</span>
+  <span class="op">}</span>
+  
+  <span class="fu"><a href="https://rdrr.io/r/base/readRDS.html">saveRDS</a></span><span class="op">(</span><span class="va">all</span>, file <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/paste.html">paste</a></span><span class="op">(</span><span class="st">"data/processed/all_"</span>, <span class="va">res</span>, <span class="st">"m.RDS"</span>, sep <span class="op">=</span> <span class="st">""</span><span class="op">)</span><span class="op">)</span>
+<span class="op">}</span>
+
+<span class="co"># Somehow this often hangs despite ample memory available, in which case better executed serially.</span>
+<span class="co"># r &lt;- parallel::mclapply(c(500, 1000, 2000), function(x) { generate_composites(hrw_ppis, dhl_ppis, res = x, maxrange = 66000)},</span>
+<span class="co">#                         mc.cores = 3, mc.preschedule = FALSE)</span>
+<span class="va">r</span> <span class="op">&lt;-</span> <span class="fu">parallel</span><span class="fu">::</span><span class="fu"><a href="https://rdrr.io/r/parallel/mclapply.html">mclapply</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/c.html">c</a></span><span class="op">(</span><span class="fl">1000</span>, <span class="fl">2000</span><span class="op">)</span>, <span class="kw">function</span><span class="op">(</span><span class="va">x</span><span class="op">)</span> <span class="op">{</span> <span class="fu">generate_composites</span><span class="op">(</span><span class="va">hrw_ppis</span>, <span class="va">dhl_ppis</span>, res <span class="op">=</span> <span class="va">x</span>, maxrange <span class="op">=</span> <span class="fl">66000</span><span class="op">)</span><span class="op">}</span>,
+                        mc.cores <span class="op">=</span> <span class="fl">3</span>, mc.preschedule <span class="op">=</span> <span class="cn">FALSE</span><span class="op">)</span></code></pre></div>
+
+</div>
+  <div class="chapter-nav">
+<div class="prev"><a href="rain-stacking.html"><span class="header-section-number">3</span> Rain stacking</a></div>
+<div class="next"><a href="em-interference.html"><span class="header-section-number">5</span> EM Interference</a></div>
+</div></main><div class="col-md-3 col-lg-2 d-none d-md-block sidebar sidebar-chapter">
+    <nav id="toc" data-toggle="toc" aria-label="On this page"><h2>On this page</h2>
+      <ul class="nav navbar-nav"><li><a class="nav-link" href="#rain-visualisation"><span class="header-section-number">4</span> Rain visualisation</a></li></ul>
+
+      <div class="book-extra">
+        <ul class="list-unstyled">
+<li><a id="book-source" href="https://github.com/barthoekstra/clearskies/blob/master/visualisation.Rmd">View source <i class="fab fa-github"></i></a></li>
+          <li><a id="book-edit" href="https://github.com/barthoekstra/clearskies/edit/master/visualisation.Rmd">Edit this page <i class="fab fa-github"></i></a></li>
+        </ul>
+</div>
+    </nav>
+</div>
+
+</div>
+</div> <!-- .container -->
+
+<footer class="bg-primary text-light mt-5"><div class="container"><div class="row">
+
+  <div class="col-12 col-md-6 mt-3">
+    <p>"<strong>Clear Skies</strong>: Filtering of Dutch weather radar data" was written by Bart Hoekstra. </p>
+  </div>
+
+  <div class="col-12 col-md-6 mt-3">
+    <p>This book was built by the <a class="text-light" href="https://bookdown.org">bookdown</a> R package.</p>
+  </div>
+
+</div></div>
+</footer><!-- dynamically load mathjax for compatibility with self-contained --><script>
+  (function () {
+    var script = document.createElement("script");
+    script.type = "text/javascript";
+    var src = "true";
+    if (src === "" || src === "true") src = "https://mathjax.rstudio.com/latest/MathJax.js?config=TeX-MML-AM_CHTML";
+    if (location.protocol !== "file:")
+      if (/^https?:/.test(src))
+        src = src.replace(/^https?:/, '');
+    script.src = src;
+    document.getElementsByTagName("head")[0].appendChild(script);
+  })();
+</script>
+</body>
+</html>

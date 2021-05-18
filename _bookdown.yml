@@ -9,3 +9,6 @@ rmd_files:
 - "index.Rmd"
 - "banding.Rmd"
 - "segmentation.Rmd"
+- "stacking.Rmd"
+- "visualisation.Rmd"
+- "emfiltering.Rmd"

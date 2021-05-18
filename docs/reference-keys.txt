@@ -6,3 +6,7 @@ problem
 solution-1
 filter-pixels-without-dual-pol-measurements
 image-processing
+rain-stacking
+problem-1
+rain-visualisation
+em-interference
